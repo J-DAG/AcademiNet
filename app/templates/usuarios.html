@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}Usuarios — AcademiNet{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Usuarios</h1>
+    <button class="btn btn-primary" onclick="toggleForm('formCrear')">+ Nuevo Usuario</button>
+</div>
+
+<!-- Formulario crear usuario -->
+<div id="formCrear" class="card form-card hidden">
+    <h2>Registrar Usuario y Cuenta</h2>
+    <form id="formUsuario" onsubmit="crearUsuario(event)">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Cédula *</label>
+                <input type="text" id="cedula" placeholder="0102030405" required maxlength="13">
+            </div>
+            <div class="form-group">
+                <label>Nombres *</label>
+                <input type="text" id="nombres" required>
+            </div>
+            <div class="form-group">
+                <label>Apellidos *</label>
+                <input type="text" id="apellidos" required>
+            </div>
+            <div class="form-group">
+                <label>Cargo *</label>
+                <select id="cargo" required>
+                    <option value="profesor">Profesor</option>
+                    <option value="investigador">Investigador</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="email">
+            </div>
+            <div class="form-group">
+                <label>Tipo de Cuenta</label>
+                <select id="tipo_cuenta">
+                    <option value="regular">Regular</option>
+                    <option value="premium">Premium</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Registrar</button>
+            <button type="button" class="btn btn-ghost" onclick="toggleForm('formCrear')">Cancelar</button>
+        </div>
+    </form>
+</div>
+
+<!-- Lista de usuarios -->
+<div class="card">
+    <div class="table-header">
+        <h2>Lista de Usuarios</h2>
+        <input type="text" id="searchInput" placeholder="Buscar..." oninput="filtrarUsuarios()" class="search-input">
+    </div>
+    <div class="table-wrapper">
+        <table class="data-table" id="tablaUsuarios">
+            <thead>
+                <tr>
+                    <th>ID</th><th>Cédula</th><th>Nombres</th><th>Apellidos</th>
+                    <th>Cargo</th><th>Email</th><th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tbodyUsuarios">
+                <tr><td colspan="7" class="loading-row">Cargando...</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="pagination">
+        <button class="btn btn-ghost" onclick="cambiarPagina(-1)" id="btnPrev">← Anterior</button>
+        <span id="paginaInfo">Página 1</span>
+        <button class="btn btn-ghost" onclick="cambiarPagina(1)" id="btnNext">Siguiente →</button>
+    </div>
+</div>
+
+<!-- Consulta especial -->
+<div class="card">
+    <div class="table-header">
+        <h2>Usuarios con más de 10 publicaciones</h2>
+        <button class="btn btn-secondary" onclick="cargarActivos()">Ejecutar consulta</button>
+    </div>
+    <div id="resultadoActivos"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let pagina = 0;
+const limit = 20;
+let todosUsuarios = [];
+
+async function cargarUsuarios() {
+    const res = await fetch(`/api/usuarios/?limit=${limit}&offset=${pagina * limit}`);
+    const data = await res.json();
+    todosUsuarios = data;
+    renderTabla(data);
+    document.getElementById('paginaInfo').textContent = `Página ${pagina + 1}`;
+    document.getElementById('btnPrev').disabled = pagina === 0;
+    document.getElementById('btnNext').disabled = data.length < limit;
+}
+
+function renderTabla(data) {
+    const tbody = document.getElementById('tbodyUsuarios');
+    if (!data.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="loading-row">Sin resultados</td></tr>';
+        return;
+    }
+    tbody.innerHTML = data.map(u => `
+        <tr>
+            <td>${u.id_usuario}</td>
+            <td><code>${u.cedula}</code></td>
+            <td>${u.nombres}</td>
+            <td>${u.apellidos}</td>
+            <td><span class="badge badge-${u.cargo}">${u.cargo}</span></td>
+            <td>${u.email || '—'}</td>
+            <td>
+                <button class="btn-icon" onclick="verCreditos(${u.id_usuario})" title="Ver créditos">💰</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function filtrarUsuarios() {
+    const q = document.getElementById('searchInput').value.toLowerCase();
+    renderTabla(todosUsuarios.filter(u =>
+        u.nombres.toLowerCase().includes(q) ||
+        u.apellidos.toLowerCase().includes(q) ||
+        u.cedula.includes(q)
+    ));
+}
+
+function cambiarPagina(dir) {
+    pagina = Math.max(0, pagina + dir);
+    cargarUsuarios();
+}
+
+async function crearUsuario(e) {
+    e.preventDefault();
+    const body = {
+        cedula: document.getElementById('cedula').value,
+        nombres: document.getElementById('nombres').value,
+        apellidos: document.getElementById('apellidos').value,
+        cargo: document.getElementById('cargo').value,
+        email: document.getElementById('email').value || null,
+        tipo_cuenta: document.getElementById('tipo_cuenta').value,
+        privacidad: 'publico'
+    };
+    const res = await fetch('/api/usuarios/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    showToast(data.success ? '✅ ' + data.mensaje : '❌ ' + data.detail, data.success);
+    if (data.success) { toggleForm('formCrear'); cargarUsuarios(); }
+}
+
+async function verCreditos(id) {
+    const res = await fetch(`/api/cuentas/${id}/creditos`);
+    const data = await res.json();
+    showToast(`💰 Créditos: ${data.creditos} | Seguidores: ${data.numero_seguidores}`, true);
+}
+
+async function cargarActivos() {
+    const res = await fetch('/api/usuarios/consulta/activos');
+    const data = await res.json();
+    const div = document.getElementById('resultadoActivos');
+    if (!data.length) { div.innerHTML = '<p class="empty">Sin resultados</p>'; return; }
+    div.innerHTML = `<table class="data-table"><thead><tr>
+        <th>ID</th><th>Nombres</th><th>Apellidos</th><th>Cargo</th><th>Total Pubs</th>
+    </tr></thead><tbody>${data.map(r => `
+        <tr>
+            <td>${r.id_usuario}</td><td>${r.nombres}</td><td>${r.apellidos}</td>
+            <td><span class="badge badge-${r.cargo}">${r.cargo}</span></td>
+            <td><strong>${r.total_pubs}</strong></td>
+        </tr>`).join('')}
+    </tbody></table>`;
+}
+
+cargarUsuarios();
+</script>
+{% endblock %}

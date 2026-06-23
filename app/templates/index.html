@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}AcademiNet — Inicio{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div class="hero-content">
+        <h1 class="hero-title">AcademiNet</h1>
+        <p class="hero-subtitle">Red Social Universitaria de Alta Concurrencia</p>
+        <p class="hero-desc">Motor de datos PostgreSQL con transacciones ACID, triggers de auditoría y control de concurrencia.</p>
+        <div class="hero-actions">
+            <a href="/usuarios-page" class="btn btn-primary">Ver Usuarios</a>
+            <a href="/publicaciones-page" class="btn btn-secondary">Publicaciones</a>
+        </div>
+    </div>
+</section>
+
+<section class="stats-section">
+    <h2 class="section-title">Estadísticas del Sistema</h2>
+    <div class="stats-grid" id="statsGrid">
+        <div class="stat-card loading">Cargando...</div>
+    </div>
+</section>
+
+<section class="features-section">
+    <h2 class="section-title">Módulos del Sistema</h2>
+    <div class="features-grid">
+        <div class="feature-card">
+            <div class="feature-icon">🔐</div>
+            <h3>Transacciones ACID</h3>
+            <p>Sistema de créditos con transferencia atómica entre usuarios al dar likes o citaciones.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <h3>Control de Concurrencia</h3>
+            <p>SELECT FOR UPDATE y niveles de aislamiento para 50 usuarios simultáneos.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🛡️</div>
+            <h3>Triggers de Auditoría</h3>
+            <p>Registro automático de cambios de foto de perfil y eliminación de publicaciones.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🚫</div>
+            <h3>Anti-Spam</h3>
+            <p>Trigger que impide más de 5 publicaciones por minuto por usuario.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📈</div>
+            <h3>Indexación Estratégica</h3>
+            <p>Índices B-Tree y compuestos con EXPLAIN ANALYZE para reducir costos de consulta.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🌱</div>
+            <h3>Volumetría</h3>
+            <p>Scripts para poblar la BD con 10,000 usuarios y 100,000 publicaciones.</p>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadStats() {
+    try {
+        const res = await fetch('/api/admin/estadisticas');
+        const data = await res.json();
+        const grid = document.getElementById('statsGrid');
+        const labels = {
+            total_usuarios: 'Usuarios',
+            total_cuentas: 'Cuentas',
+            total_publicaciones: 'Publicaciones',
+            total_fotografias: 'Fotografías',
+            total_comentarios: 'Comentarios',
+            total_likes: 'Likes',
+            total_auditorias: 'Auditorías',
+        };
+        grid.innerHTML = Object.entries(labels).map(([k, label]) => `
+            <div class="stat-card">
+                <div class="stat-number">${(data[k] ?? 0).toLocaleString()}</div>
+                <div class="stat-label">${label}</div>
+            </div>
+        `).join('');
+    } catch(e) {
+        document.getElementById('statsGrid').innerHTML =
+            '<div class="stat-card error">No se pudo conectar con la BD</div>';
+    }
+}
+loadStats();
+</script>
+{% endblock %}

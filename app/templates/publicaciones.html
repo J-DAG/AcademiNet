@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}Publicaciones — AcademiNet{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Publicaciones</h1>
+    <button class="btn btn-primary" onclick="toggleForm('formPub')">+ Nueva Publicación</button>
+</div>
+
+<!-- Formulario crear publicación -->
+<div id="formPub" class="card form-card hidden">
+    <h2>Nueva Publicación</h2>
+    <form onsubmit="crearPublicacion(event)">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Título *</label>
+                <input type="text" id="titulo" required>
+            </div>
+            <div class="form-group">
+                <label>Tipo *</label>
+                <select id="tipo">
+                    <option value="microblog">Microblog</option>
+                    <option value="paper">Paper</option>
+                    <option value="comentario">Comentario</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>ID Autor *</label>
+                <input type="number" id="autor" required min="1">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Contenido</label>
+            <textarea id="contenido" rows="4" placeholder="Escribe el contenido..."></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Publicar</button>
+            <button type="button" class="btn btn-ghost" onclick="toggleForm('formPub')">Cancelar</button>
+        </div>
+    </form>
+</div>
+
+<!-- Filtros -->
+<div class="card filter-bar">
+    <label>Filtrar por tipo:</label>
+    <button class="btn btn-chip active" onclick="setFiltro(null, this)">Todos</button>
+    <button class="btn btn-chip" onclick="setFiltro('paper', this)">Papers</button>
+    <button class="btn btn-chip" onclick="setFiltro('microblog', this)">Microblogs</button>
+    <button class="btn btn-chip" onclick="setFiltro('comentario', this)">Comentarios</button>
+</div>
+
+<!-- Feed de publicaciones -->
+<div id="feedPublicaciones" class="feed">
+    <div class="loading-row">Cargando publicaciones...</div>
+</div>
+
+<div class="pagination">
+    <button class="btn btn-ghost" onclick="cambiarPagina(-1)" id="btnPrev">← Anterior</button>
+    <span id="paginaInfo">Página 1</span>
+    <button class="btn btn-ghost" onclick="cambiarPagina(1)" id="btnNext">Siguiente →</button>
+</div>
+
+<!-- Modal like/citar -->
+<div id="modalAcciones" class="modal hidden">
+    <div class="modal-content">
+        <h3>Acciones sobre publicación <span id="modalPubId"></span></h3>
+        <div class="form-group">
+            <label>Tu ID de usuario</label>
+            <input type="number" id="modalUserId" min="1">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-primary" onclick="darLike()">👍 Like (+1 crédito)</button>
+            <button class="btn btn-secondary" onclick="toggleModal(false)">Cerrar</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let pagina = 0;
+const limit = 10;
+let filtroTipo = null;
+let pubSeleccionada = null;
+
+async function cargarPublicaciones() {
+    const params = new URLSearchParams({ limit, offset: pagina * limit });
+    if (filtroTipo) params.append('tipo', filtroTipo);
+    const res = await fetch('/api/publicaciones/?' + params);
+    const data = await res.json();
+    renderFeed(data);
+    document.getElementById('paginaInfo').textContent = `Página ${pagina + 1}`;
+    document.getElementById('btnPrev').disabled = pagina === 0;
+    document.getElementById('btnNext').disabled = data.length < limit;
+}
+
+function renderFeed(data) {
+    const feed = document.getElementById('feedPublicaciones');
+    if (!data.length) { feed.innerHTML = '<div class="empty">Sin publicaciones</div>'; return; }
+    feed.innerHTML = data.map(p => `
+        <div class="pub-card">
+            <div class="pub-header">
+                <span class="badge badge-tipo-${p.tipo}">${p.tipo.toUpperCase()}</span>
+                <span class="pub-date">${new Date(p.fecha_publicacion).toLocaleDateString('es-EC')}</span>
+            </div>
+            <h3 class="pub-titulo">${escHtml(p.titulo)}</h3>
+            ${p.contenido ? `<p class="pub-contenido">${escHtml(p.contenido)}</p>` : ''}
+            <div class="pub-footer">
+                <span>✍️ Autor: #${p.autor}</span>
+                <span>📖 Citaciones: ${p.nro_citaciones}</span>
+                <div class="pub-actions">
+                    <button class="btn-icon" onclick="abrirModal(${p.id})">👍 Like</button>
+                    <button class="btn-icon" onclick="verComentarios(${p.id})">💬</button>
+                </div>
+            </div>
+            <div id="comentarios-${p.id}" class="comentarios-container hidden"></div>
+        </div>
+    `).join('');
+}
+
+function setFiltro(tipo, btn) {
+    filtroTipo = tipo;
+    document.querySelectorAll('.btn-chip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    pagina = 0;
+    cargarPublicaciones();
+}
+
+function cambiarPagina(dir) {
+    pagina = Math.max(0, pagina + dir);
+    cargarPublicaciones();
+}
+
+async function crearPublicacion(e) {
+    e.preventDefault();
+    const body = {
+        titulo: document.getElementById('titulo').value,
+        tipo: document.getElementById('tipo').value,
+        autor: parseInt(document.getElementById('autor').value),
+        contenido: document.getElementById('contenido').value || null
+    };
+    const res = await fetch('/api/publicaciones/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+    });
+    if (res.ok) {
+        showToast('✅ Publicación creada', true);
+        toggleForm('formPub');
+        pagina = 0;
+        cargarPublicaciones();
+    } else {
+        const err = await res.json();
+        showToast('❌ ' + (err.detail || 'Error'), false);
+    }
+}
+
+function abrirModal(id) {
+    pubSeleccionada = id;
+    document.getElementById('modalPubId').textContent = '#' + id;
+    toggleModal(true);
+}
+
+function toggleModal(show) {
+    document.getElementById('modalAcciones').classList.toggle('hidden', !show);
+}
+
+async function darLike() {
+    const userId = parseInt(document.getElementById('modalUserId').value);
+    if (!userId) { showToast('❌ Ingresa tu ID de usuario', false); return; }
+    const res = await fetch('/api/publicaciones/likes', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ id_usuario: userId, id_publicacion: pubSeleccionada })
+    });
+    const data = await res.json();
+    showToast(data.success ? '✅ ' + data.mensaje : '❌ ' + data.detail, data.success);
+    toggleModal(false);
+}
+
+async function verComentarios(id) {
+    const div = document.getElementById(`comentarios-${id}`);
+    div.classList.toggle('hidden');
+    if (!div.classList.contains('hidden')) {
+        const res = await fetch(`/api/publicaciones/${id}/comentarios`);
+        const data = await res.json();
+        div.innerHTML = data.length
+            ? data.map(c => `<div class="comentario"><strong>#${c.id_usuario}:</strong> ${escHtml(c.contenido)}</div>`).join('')
+            : '<div class="comentario empty">Sin comentarios</div>';
+    }
+}
+
+function escHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+cargarPublicaciones();
+</script>
+{% endblock %}

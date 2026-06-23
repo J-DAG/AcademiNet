@@ -1,0 +1,35 @@
+# Credenciales — NUNCA subir al repo
+.env
+
+# IDE JetBrains (PyCharm, etc.)
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Entornos virtuales
+venv/
+.venv/
+env/
+ENV/
+
+# Distribución / build
+dist/
+build/
+*.egg-info/
+
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+
+# Windows
+Thumbs.db
+desktop.ini

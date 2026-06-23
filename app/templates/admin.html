@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Admin — AcademiNet{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Panel de Administración</h1>
+</div>
+
+<div class="admin-grid">
+
+    <!-- Inicializar BD -->
+    <div class="card admin-card">
+        <h2>🗄️ Inicializar Base de Datos</h2>
+        <p>Ejecuta todos los scripts SQL (schema, procedimientos, triggers, índices).</p>
+        <button class="btn btn-primary" onclick="initDB()">Inicializar BD</button>
+        <div id="resultInitDB" class="result-box"></div>
+    </div>
+
+    <!-- Poblar datos -->
+    <div class="card admin-card">
+        <h2>🌱 Poblar Base de Datos</h2>
+        <p>Genera <strong>10,000 usuarios</strong> y <strong>100,000 publicaciones</strong> con datos ficticios.</p>
+        <p style="font-size:.8rem;color:var(--text-muted)">Si la BD ya tiene datos suficientes, el script los detecta y no duplica. Activa "Forzar" solo si quieres agregar otro lote.</p>
+        <div class="toggle-row" style="margin-bottom:.75rem">
+            <input type="checkbox" id="poblarForzar">
+            <label for="poblarForzar">Forzar repoblación (agrega otro lote aunque ya haya datos)</label>
+        </div>
+        <button class="btn btn-warning" onclick="poblarBD()">Poblar Datos</button>
+        <div id="resultPoblar" class="result-box"></div>
+    </div>
+
+    <!-- Prueba de concurrencia -->
+    <div class="card admin-card">
+        <h2>⚡ Prueba de Concurrencia</h2>
+        <p>Simula <strong>50 usuarios simultáneos</strong> comentando en la misma publicación.</p>
+        <input type="number" id="pubConcurrencia" placeholder="ID publicación" class="input-sm">
+        <button class="btn btn-secondary" onclick="testConcurrencia()">Iniciar prueba</button>
+        <div id="resultConcurrencia" class="result-box"></div>
+    </div>
+
+    <!-- Simulación de fallo ACID -->
+    <div class="card admin-card">
+        <h2>🔄 Demo ACID — Simulación de Fallo</h2>
+        <p>Demuestra que un fallo a mitad de la transferencia de créditos hace ROLLBACK automático.</p>
+        <div class="form-grid-2">
+            <input type="number" id="acidOrigen" placeholder="ID usuario origen" class="input-sm">
+            <input type="number" id="acidDestino" placeholder="ID usuario destino" class="input-sm">
+            <input type="number" id="acidMonto" placeholder="Monto" value="5" class="input-sm">
+        </div>
+        <div class="toggle-row">
+            <label>
+                <input type="checkbox" id="acidForzarFallo">
+                Forzar fallo (ROLLBACK demo)
+            </label>
+        </div>
+        <button class="btn btn-danger" onclick="simularFallo()">Ejecutar</button>
+        <div id="resultACID" class="result-box"></div>
+    </div>
+
+    <!-- Log de auditoría -->
+    <div class="card admin-card admin-card-wide">
+        <h2>📋 Log de Auditoría</h2>
+        <button class="btn btn-ghost" onclick="cargarAuditoria()">Cargar eventos</button>
+        <div id="resultAuditoria" class="result-box"></div>
+    </div>
+
+    <!-- Consultas complejas -->
+    <div class="card admin-card admin-card-wide">
+        <h2>🔍 Consultas de Optimización</h2>
+        <div class="consultas-btns">
+            <button class="btn btn-secondary" onclick="consultaA()">A: Usuarios activos</button>
+            <button class="btn btn-secondary" onclick="consultaB()">B: Top fotógrafos</button>
+            <button class="btn btn-secondary" onclick="consultaC()">C: Fotos más interacciones</button>
+        </div>
+        <div id="resultConsultas" class="result-box"></div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function initDB() {
+    const res = await fetch('/api/admin/init-db', {method:'POST'});
+    const data = await res.json();
+    mostrarResultado('resultInitDB', data);
+}
+
+async function poblarBD() {
+    const forzar = document.getElementById('poblarForzar').checked;
+    document.getElementById('resultPoblar').innerHTML = '<p class="info">⏳ Iniciando población masiva en segundo plano...</p>';
+    const res = await fetch(`/api/admin/poblar?forzar=${forzar}`, {method:'POST'});
+    const data = await res.json();
+    mostrarResultado('resultPoblar', data);
+}
+
+async function testConcurrencia() {
+    document.getElementById('resultConcurrencia').innerHTML = '<p class="info">⏳ Ejecutando prueba...</p>';
+    const res = await fetch('/api/admin/concurrencia', {method:'POST'});
+    const data = await res.json();
+    mostrarResultado('resultConcurrencia', data);
+}
+
+async function simularFallo() {
+    const body = {
+        id_usuario_origen: parseInt(document.getElementById('acidOrigen').value),
+        id_usuario_destino: parseInt(document.getElementById('acidDestino').value),
+        monto: parseInt(document.getElementById('acidMonto').value) || 1,
+        forzar_fallo: document.getElementById('acidForzarFallo').checked
+    };
+    const res = await fetch('/api/publicaciones/simular-fallo', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    mostrarResultado('resultACID', data);
+}
+
+async function cargarAuditoria() {
+    const res = await fetch('/api/admin/auditoria?limit=20');
+    const data = await res.json();
+    const div = document.getElementById('resultAuditoria');
+    if (!data.length) { div.innerHTML = '<p class="empty">Sin eventos de auditoría</p>'; return; }
+    div.innerHTML = `<table class="data-table"><thead><tr>
+        <th>ID</th><th>Tabla</th><th>Operación</th><th>Usuario</th><th>Descripción</th><th>Fecha</th>
+    </tr></thead><tbody>${data.map(r=>`
+        <tr>
+            <td>${r.id_auditoria}</td>
+            <td><code>${r.tabla_afectada}</code></td>
+            <td><span class="badge">${r.operacion}</span></td>
+            <td>#${r.id_usuario||'—'}</td>
+            <td>${r.descripcion||'—'}</td>
+            <td>${new Date(r.fecha_evento).toLocaleString('es-EC')}</td>
+        </tr>`).join('')}
+    </tbody></table>`;
+}
+
+async function consultaA() {
+    const res = await fetch('/api/usuarios/consulta/activos');
+    renderConsultaTabla(await res.json(), ['id_usuario','nombres','apellidos','cargo','total_pubs']);
+}
+async function consultaB() {
+    const res = await fetch('/api/publicaciones/consulta/top-fotografos');
+    renderConsultaTabla(await res.json(), ['id_usuario','nombres','apellidos','total_fotos','total_comentarios']);
+}
+async function consultaC() {
+    const res = await fetch('/api/publicaciones/consulta/fotos-interacciones');
+    renderConsultaTabla(await res.json(), ['id_foto','descripcion','nombre_usuario','likes','comentarios','total_interacciones']);
+}
+
+function renderConsultaTabla(data, cols) {
+    const div = document.getElementById('resultConsultas');
+    if (!data.length) { div.innerHTML = '<p class="empty">Sin resultados</p>'; return; }
+    div.innerHTML = `<table class="data-table"><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
+    <tbody>${data.map(r=>`<tr>${cols.map(c=>`<td>${r[c]??'—'}</td>`).join('')}</tr>`).join('')}
+    </tbody></table>`;
+}
+
+function mostrarResultado(id, data) {
+    const div = document.getElementById(id);
+    const cls = data.success ? 'success' : 'error';
+    div.innerHTML = `<p class="${cls}">${data.success ? '✅' : '❌'} ${data.mensaje}</p>`;
+}
+</script>
+{% endblock %}
