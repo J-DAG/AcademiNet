@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}Galería — AcademiNet{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Galería de Fotografías</h1>
+    <button class="btn btn-primary" onclick="toggleForm('formFoto')">+ Registrar Foto</button>
+</div>
+
+<!-- Formulario: registrar URL de foto -->
+<div id="formFoto" class="card form-card hidden">
+    <h2>Registrar Fotografía por URL</h2>
+    <p style="color:var(--text-secondary);font-size:.88rem;margin-bottom:1rem">
+        Ingresa la URL raw de una imagen del repositorio <strong>dharmx/walls</strong>
+        (https://raw.githubusercontent.com/dharmx/walls/main/…)
+    </p>
+    <form onsubmit="registrarFoto(event)">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>ID Usuario *</label>
+                <input type="number" id="fotoUsuario" required min="1" placeholder="Ej: 1">
+            </div>
+            <div class="form-group">
+                <label>Descripción</label>
+                <input type="text" id="fotoDesc" placeholder="Ej: Diagrama de resultados">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>URL de imagen *</label>
+            <input type="url" id="fotoUrl" required
+                   placeholder="https://raw.githubusercontent.com/dharmx/walls/main/…">
+        </div>
+        <!-- Preview de la URL -->
+        <div id="urlPreviewWrap" class="foto-preview-wrap hidden" style="margin:.5rem 0 1rem">
+            <img id="urlPreviewImg" class="foto-preview" alt="Preview"
+                 onerror="this.style.display='none'" style="max-height:160px;border-radius:8px">
+        </div>
+        <div class="form-actions">
+            <button type="button" class="btn btn-ghost" onclick="previewUrl()">Vista previa</button>
+            <button type="submit" class="btn btn-primary">Registrar</button>
+            <button type="button" class="btn btn-ghost" onclick="toggleForm('formFoto')">Cancelar</button>
+        </div>
+    </form>
+</div>
+
+<!-- Filtros y búsqueda -->
+<div class="card filter-bar">
+    <input type="number" id="filtroUsuario" placeholder="Filtrar por ID usuario"
+           class="search-input" style="width:180px">
+    <button class="btn btn-ghost" onclick="filtrarPorUsuario()">Buscar</button>
+    <button class="btn btn-ghost" onclick="resetFiltro()">Ver todas</button>
+</div>
+
+<!-- Galería grid -->
+<div class="card">
+    <div id="galeria" class="galeria-grid">
+        <div class="loading-row">Cargando galería...</div>
+    </div>
+    <div class="pagination">
+        <button class="btn btn-ghost" onclick="cambiarPagina(-1)" id="btnPrev">← Anterior</button>
+        <span id="paginaInfo">Página 1</span>
+        <button class="btn btn-ghost" onclick="cambiarPagina(1)" id="btnNext">Siguiente →</button>
+    </div>
+</div>
+
+<!-- Modal imagen grande -->
+<div id="modalFoto" class="modal hidden" onclick="cerrarModalFoto(event)">
+    <div class="modal-foto-content" onclick="event.stopPropagation()">
+        <img id="modalImg" src="" alt="" class="modal-img"
+             onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22320%22 height=%22220%22><rect fill=%22%23e2e8f0%22 width=%22320%22 height=%22220%22/><text x=%22160%22 y=%22120%22 text-anchor=%22middle%22 fill=%22%2394a3b8%22 font-size=%2248%22>📷</text></svg>'">
+        <div class="modal-foto-info">
+            <p id="modalDesc" class="modal-desc"></p>
+            <p id="modalMeta" class="modal-meta"></p>
+            <button class="btn btn-ghost" onclick="document.getElementById('modalFoto').classList.add('hidden')">Cerrar</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let pagina = 0;
+const limit = 12;
+let endpointActual = () => `/api/fotografias/?limit=${limit}&offset=${pagina * limit}`;
+
+function previewUrl() {
+    const url = document.getElementById('fotoUrl').value.trim();
+    if (!url) return;
+    const img = document.getElementById('urlPreviewImg');
+    img.style.display = 'block';
+    img.src = url;
+    document.getElementById('urlPreviewWrap').classList.remove('hidden');
+}
+
+async function registrarFoto(e) {
+    e.preventDefault();
+    const body = {
+        id_usuario: parseInt(document.getElementById('fotoUsuario').value),
+        ruta_imagen: document.getElementById('fotoUrl').value.trim(),
+        descripcion: document.getElementById('fotoDesc').value.trim() || null
+    };
+    const res = await fetch('/api/fotografias/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+    });
+    if (res.ok) {
+        showToast('✅ Fotografía registrada correctamente', true);
+        toggleForm('formFoto');
+        pagina = 0;
+        cargarFotos();
+    } else {
+        const err = await res.json();
+        showToast('❌ ' + (err.detail || 'Error'), false);
+    }
+}
+
+async function cargarFotos() {
+    const galeria = document.getElementById('galeria');
+    galeria.innerHTML = '<div class="loading-row">Cargando...</div>';
+    const res = await fetch(endpointActual());
+    const data = await res.json();
+
+    document.getElementById('paginaInfo').textContent = `Página ${pagina + 1}`;
+    document.getElementById('btnPrev').disabled = pagina === 0;
+    document.getElementById('btnNext').disabled = data.length < limit;
+
+    if (!data.length) {
+        galeria.innerHTML = '<div class="empty" style="padding:2rem;text-align:center">Sin fotografías registradas.</div>';
+        return;
+    }
+
+    galeria.innerHTML = data.map(f => `
+        <div class="foto-card" onclick="abrirFoto('${escHtml(f.ruta_imagen)}', '${escHtml(f.descripcion || '')}', ${f.id_usuario}, ${f.id_foto})">
+            <div class="foto-thumb-wrap">
+                <img src="${escHtml(f.ruta_imagen)}"
+                     alt="${escHtml(f.descripcion || 'Fotografía')}"
+                     class="foto-thumb"
+                     loading="lazy"
+                     onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22><rect fill=%22%23e2e8f0%22 width=%22100%22 height=%22100%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 fill=%22%2394a3b8%22 font-size=%2228%22>📷</text></svg>'">
+            </div>
+            <div class="foto-card-info">
+                <p class="foto-desc-sm">${escHtml(f.descripcion || 'Sin descripción')}</p>
+                <div class="foto-card-meta">
+                    <span>👤 #${f.id_usuario}</span>
+                    <span>#${f.id_foto}</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function filtrarPorUsuario() {
+    const uid = document.getElementById('filtroUsuario').value;
+    if (!uid) { resetFiltro(); return; }
+    pagina = 0;
+    endpointActual = () => `/api/fotografias/usuario/${uid}`;
+    cargarFotos();
+}
+
+function resetFiltro() {
+    pagina = 0;
+    endpointActual = () => `/api/fotografias/?limit=${limit}&offset=${pagina * limit}`;
+    cargarFotos();
+}
+
+function cambiarPagina(dir) {
+    pagina = Math.max(0, pagina + dir);
+    cargarFotos();
+}
+
+function abrirFoto(url, desc, usuario, id) {
+    document.getElementById('modalImg').src = url;
+    document.getElementById('modalDesc').textContent = desc || 'Sin descripción';
+    document.getElementById('modalMeta').textContent = `👤 Usuario #${usuario}  ·  Foto #${id}`;
+    document.getElementById('modalFoto').classList.remove('hidden');
+}
+
+function cerrarModalFoto(e) {
+    if (e.target === document.getElementById('modalFoto')) {
+        document.getElementById('modalFoto').classList.add('hidden');
+    }
+}
+
+function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+cargarFotos();
+</script>
+{% endblock %}

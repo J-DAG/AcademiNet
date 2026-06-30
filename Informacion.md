@@ -172,6 +172,29 @@ Proyecto_BD2/
 
 ---
 
+### v0.5 — 2026-06-29 — Rediseño del módulo de fotografías (URL-based)
+
+**Motivación:** Las imágenes provienen del repositorio público `dharmx/walls` (wallpapers en GitHub). Se almacenan como URLs raw (`https://raw.githubusercontent.com/dharmx/walls/main/{path}`), no como BYTEA. Una publicación puede tener opcionalmente una foto adjunta; likes, comentarios y descripción pertenecen a la publicación, no a la foto.
+
+**Base de datos:**
+- `01_schema.sql` — Eliminadas tablas `likes_fotografias` y `comentarios_foto`. `fotografias.objeto BYTEA` → `ruta_imagen VARCHAR(500) NOT NULL`. `cuentas.foto_perfil` → VARCHAR(500). Añadida columna `id_foto INT REFERENCES fotografias(id_foto) ON DELETE SET NULL` en `publicaciones`.
+- `02_procedures.sql` — Consultas B y C reescritas: B usa `p.id_foto IS NOT NULL`; C hace JOIN `publicaciones → fotografias → likes_publicaciones/comentarios` en lugar de `likes_fotografias`.
+- `03_triggers.sql` — Eliminado `trg_actualizar_likes_foto` (tabla `likes_fotografias` ya no existe). Trigger de auditoría de eliminación ahora registra `id_foto`.
+- `04_indexes.sql` — Eliminados índices sobre `likes_fotografias` y `comentarios_foto`. Añadido `idx_pub_id_foto ON publicaciones (id_foto) WHERE id_foto IS NOT NULL`.
+
+**Backend:**
+- `app/models/schemas.py` — `FotografiaCreate` y `FotografiaOut` usan `ruta_imagen` (sin `nro_likes`). `PublicacionCreate` añade `id_foto: Optional[int]`. `PublicacionOut` añade `id_foto` y `ruta_imagen` (joined desde fotografias).
+- `app/routers/photos.py` — Eliminado endpoint de upload de archivo y de servir BYTEA. Endpoint `POST /api/fotografias/` acepta JSON con URL. Galería lista desde `/api/fotografias/`.
+- `app/routers/publications.py` — Todas las queries de publicaciones hacen `LEFT JOIN fotografias f ON f.id_foto = p.id_foto` y retornan `ruta_imagen`.
+- `scripts/seed_data.py` — Consulta la GitHub API (`/repos/dharmx/walls/git/trees/main?recursive=1`), filtra extensiones de imagen, inserta hasta 5 000 fotos en `fotografias` y asigna `id_foto` al ~35% de las publicaciones.
+
+**Frontend:**
+- `app/templates/fotografias.html` — Rediseñado como galería URL-based: formulario de registro por URL (con vista previa), grid de imágenes cargadas con `<img src="ruta_imagen">`, modal de imagen grande. Eliminado todo lo relacionado a BYTEA/upload/like de foto.
+- `app/templates/publicaciones.html` — Tarjetas de publicación muestran miniatura `<img>` cuando `p.ruta_imagen` está presente. Formulario incluye campo "ID Foto (opcional)".
+- `static/css/style.css` — Añadidos estilos `.pub-foto-wrap` y `.pub-foto-thumb` para miniaturas en publicaciones.
+
+---
+
 ### v0.4 — 2026-06-23 — Manual de usuario y protección anti-duplicados
 
 **Archivos nuevos/modificados:**

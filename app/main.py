@@ -54,6 +54,11 @@ async def page_admin(request: Request):
     return templates.TemplateResponse("admin.html", {"request": request})
 
 
+@app.get("/fotografias-page", response_class=HTMLResponse)
+async def page_fotografias(request: Request):
+    return templates.TemplateResponse("fotografias.html", {"request": request})
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "app": "AcademiNet"}

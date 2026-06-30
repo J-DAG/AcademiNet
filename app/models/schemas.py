@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, field_validator
 from typing import Optional
 from datetime import datetime, date
 import re
@@ -60,12 +60,28 @@ class CuentaUpdate(BaseModel):
     bio: Optional[str] = None
 
 
+# ── Fotografías ───────────────────────────────────────────────
+class FotografiaCreate(BaseModel):
+    id_usuario: int
+    ruta_imagen: str
+    descripcion: Optional[str] = None
+
+
+class FotografiaOut(BaseModel):
+    id_foto: int
+    id_usuario: int
+    ruta_imagen: str
+    descripcion: Optional[str]
+    fecha_subida: Optional[datetime]
+
+
 # ── Publicaciones ─────────────────────────────────────────────
 class PublicacionCreate(BaseModel):
     titulo: str
     tipo: str
     autor: int
     contenido: Optional[str] = None
+    id_foto: Optional[int] = None       # FK opcional a fotografias
 
     @field_validator("tipo")
     @classmethod
@@ -80,6 +96,8 @@ class PublicacionOut(BaseModel):
     titulo: str
     tipo: str
     autor: int
+    id_foto: Optional[int]
+    ruta_imagen: Optional[str]          # joined desde fotografias
     fecha_publicacion: datetime
     nro_citaciones: int
     contenido: Optional[str]
@@ -101,16 +119,6 @@ class ComentarioOut(BaseModel):
     fecha_comentario: datetime
 
 
-# ── Fotografías ───────────────────────────────────────────────
-class FotografiaOut(BaseModel):
-    id_foto: int
-    id_usuario: int
-    descripcion: Optional[str]
-    nro_likes: int
-    fecha_subida: Optional[datetime]
-    ruta_imagen: Optional[str]
-
-
 # ── Acciones ──────────────────────────────────────────────────
 class LikePublicacion(BaseModel):
     id_usuario: int
@@ -130,13 +138,11 @@ class SimularFallo(BaseModel):
     forzar_fallo: bool = False
 
 
-# ── Seguir usuario ────────────────────────────────────────────
 class SeguirUsuario(BaseModel):
     id_seguidor: int
     id_seguido: int
 
 
-# ── Respuesta genérica ────────────────────────────────────────
 class Respuesta(BaseModel):
     success: bool
     mensaje: str

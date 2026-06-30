@@ -7,15 +7,26 @@ from app.database import get_cursor
 
 router = APIRouter(prefix="/publicaciones", tags=["Publicaciones"])
 
+# SQL base para traer publicaciones con su foto adjunta
+_SELECT_PUB = """
+    SELECT p.id, p.titulo, p.tipo, p.autor, p.id_foto,
+           f.ruta_imagen, p.fecha_publicacion, p.nro_citaciones,
+           p.contenido, p.estado
+    FROM publicaciones p
+    LEFT JOIN fotografias f ON f.id_foto = p.id_foto
+"""
+
 
 @router.post("/", response_model=PublicacionOut)
 def crear_publicacion(data: PublicacionCreate):
     with get_cursor() as cur:
         cur.execute(
-            "INSERT INTO publicaciones (titulo, tipo, autor, contenido) "
-            "VALUES (%s, %s, %s, %s) RETURNING *",
-            (data.titulo, data.tipo, data.autor, data.contenido)
+            "INSERT INTO publicaciones (titulo, tipo, autor, contenido, id_foto) "
+            "VALUES (%s, %s, %s, %s, %s) RETURNING id",
+            (data.titulo, data.tipo, data.autor, data.contenido, data.id_foto)
         )
+        new_id = cur.fetchone()["id"]
+        cur.execute(_SELECT_PUB + " WHERE p.id = %s", (new_id,))
         return cur.fetchone()
 
 
@@ -24,14 +35,14 @@ def listar_publicaciones(limit: int = 20, offset: int = 0, tipo: str = None):
     with get_cursor() as cur:
         if tipo:
             cur.execute(
-                "SELECT * FROM publicaciones WHERE estado='activo' AND tipo=%s "
-                "ORDER BY fecha_publicacion DESC LIMIT %s OFFSET %s",
+                _SELECT_PUB + " WHERE p.estado='activo' AND p.tipo=%s "
+                "ORDER BY p.fecha_publicacion DESC LIMIT %s OFFSET %s",
                 (tipo, limit, offset)
             )
         else:
             cur.execute(
-                "SELECT * FROM publicaciones WHERE estado='activo' "
-                "ORDER BY fecha_publicacion DESC LIMIT %s OFFSET %s",
+                _SELECT_PUB + " WHERE p.estado='activo' "
+                "ORDER BY p.fecha_publicacion DESC LIMIT %s OFFSET %s",
                 (limit, offset)
             )
         return cur.fetchall()
@@ -40,7 +51,7 @@ def listar_publicaciones(limit: int = 20, offset: int = 0, tipo: str = None):
 @router.get("/{id_pub}", response_model=PublicacionOut)
 def obtener_publicacion(id_pub: int):
     with get_cursor() as cur:
-        cur.execute("SELECT * FROM publicaciones WHERE id = %s", (id_pub,))
+        cur.execute(_SELECT_PUB + " WHERE p.id = %s", (id_pub,))
         row = cur.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Publicación no encontrada")

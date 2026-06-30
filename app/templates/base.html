@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}AcademiNet{% endblock %}</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/style.css?v={{ range(1,99999) | random }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
@@ -18,6 +18,7 @@
             <li><a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">Inicio</a></li>
             <li><a href="/usuarios-page" class="nav-link {% if request.url.path == '/usuarios-page' %}active{% endif %}">Usuarios</a></li>
             <li><a href="/publicaciones-page" class="nav-link {% if request.url.path == '/publicaciones-page' %}active{% endif %}">Publicaciones</a></li>
+            <li><a href="/fotografias-page" class="nav-link {% if request.url.path == '/fotografias-page' %}active{% endif %}">Fotografías</a></li>
             <li><a href="/admin-page" class="nav-link {% if request.url.path == '/admin-page' %}active{% endif %}">Admin</a></li>
             <li><a href="/docs" class="nav-link nav-docs" target="_blank">API Docs</a></li>
         </ul>

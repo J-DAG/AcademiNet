@@ -28,6 +28,10 @@
                 <label>ID Autor *</label>
                 <input type="number" id="autor" required min="1">
             </div>
+            <div class="form-group">
+                <label>ID Foto (opcional)</label>
+                <input type="number" id="idFoto" min="1" placeholder="Deja vacío si no adjuntas foto">
+            </div>
         </div>
         <div class="form-group">
             <label>Contenido</label>
@@ -103,11 +107,20 @@ function renderFeed(data) {
                 <span class="badge badge-tipo-${p.tipo}">${p.tipo.toUpperCase()}</span>
                 <span class="pub-date">${new Date(p.fecha_publicacion).toLocaleDateString('es-EC')}</span>
             </div>
+            ${p.ruta_imagen ? `
+            <div class="pub-foto-wrap">
+                <img src="${escHtml(p.ruta_imagen)}"
+                     alt="Foto adjunta"
+                     class="pub-foto-thumb"
+                     loading="lazy"
+                     onerror="this.parentElement.style.display='none'">
+            </div>` : ''}
             <h3 class="pub-titulo">${escHtml(p.titulo)}</h3>
             ${p.contenido ? `<p class="pub-contenido">${escHtml(p.contenido)}</p>` : ''}
             <div class="pub-footer">
                 <span>✍️ Autor: #${p.autor}</span>
                 <span>📖 Citaciones: ${p.nro_citaciones}</span>
+                ${p.id_foto ? `<span>📷 Foto #${p.id_foto}</span>` : ''}
                 <div class="pub-actions">
                     <button class="btn-icon" onclick="abrirModal(${p.id})">👍 Like</button>
                     <button class="btn-icon" onclick="verComentarios(${p.id})">💬</button>
@@ -133,11 +146,13 @@ function cambiarPagina(dir) {
 
 async function crearPublicacion(e) {
     e.preventDefault();
+    const idFotoVal = document.getElementById('idFoto').value;
     const body = {
         titulo: document.getElementById('titulo').value,
         tipo: document.getElementById('tipo').value,
         autor: parseInt(document.getElementById('autor').value),
-        contenido: document.getElementById('contenido').value || null
+        contenido: document.getElementById('contenido').value || null,
+        id_foto: idFotoVal ? parseInt(idFotoVal) : null
     };
     const res = await fetch('/api/publicaciones/', {
         method: 'POST',

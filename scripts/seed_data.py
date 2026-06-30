@@ -1,16 +1,20 @@
 """
 seed_data.py — Generación masiva de datos para AcademiNet
 Genera: 10,000 usuarios + 10,000 cuentas + 100,000 publicaciones
-        + fotografías + comentarios + likes
+        + fotografías (URLs de dharmx/walls) + comentarios + likes
 
 Ejecución directa:  python scripts/seed_data.py
 También invocado desde el botón "Poblar" en el panel Admin.
 """
 
-import os, sys, random, time
-from datetime import datetime, timedelta
+import os, sys, random, time, json
+import urllib.request
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+# Forzar UTF-8 en la salida para evitar UnicodeEncodeError en Windows
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 import psycopg
 from dotenv import load_dotenv
@@ -28,6 +32,8 @@ _conninfo = (
 TOTAL_USUARIOS      = 10_000
 TOTAL_PUBLICACIONES = 100_000
 BATCH_SIZE          = 500
+MAX_FOTOS_SEED      = 5_000   # fotos únicas a insertar en fotografias
+PORCENTAJE_CON_FOTO = 0.35    # ~35% de publicaciones tendrán foto
 
 NOMBRES = [
     "Carlos","María","José","Ana","Luis","Isabel","Juan","Sofía","Pedro","Elena",
@@ -78,6 +84,11 @@ CONTENIDOS = [
     "Agradezco a la Universidad de Cuenca por el financiamiento de esta investigación.",
     None,
 ]
+DESCRIPCIONES_FOTO = [
+    "Diagrama de resultados", "Gráfico comparativo", "Esquema metodológico",
+    "Ilustración del experimento", "Mapa conceptual", "Vista del dataset",
+    "Captura del entorno de pruebas", "Visualización de datos", None,
+]
 
 
 def generar_cedula_unica(existentes: set) -> str:
@@ -88,7 +99,8 @@ def generar_cedula_unica(existentes: set) -> str:
             return c
 
 
-def rand_fecha(dias_atras=365) -> datetime:
+def rand_fecha(dias_atras=365):
+    from datetime import datetime, timedelta
     return datetime.now() - timedelta(
         days=random.randint(0, dias_atras),
         hours=random.randint(0, 23)
@@ -96,8 +108,73 @@ def rand_fecha(dias_atras=365) -> datetime:
 
 
 def batch_insert(cur, sql: str, data: list):
-    """Inserta en lotes usando executemany (psycopg v3)."""
     cur.executemany(sql, data)
+
+
+def obtener_urls_github(max_urls: int = MAX_FOTOS_SEED) -> list[str]:
+    """Obtiene URLs de imágenes raw del repositorio dharmx/walls vía GitHub API."""
+    api_url = "https://api.github.com/repos/dharmx/walls/git/trees/main?recursive=1"
+    try:
+        req = urllib.request.Request(api_url, headers={"User-Agent": "AcademiNet-seed/1.0"})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read())
+        extensiones = {".jpg", ".jpeg", ".png", ".webp"}
+        base = "https://raw.githubusercontent.com/dharmx/walls/main/"
+        urls = [
+            base + item["path"]
+            for item in data.get("tree", [])
+            if item["type"] == "blob"
+            and any(item["path"].lower().endswith(ext) for ext in extensiones)
+        ]
+        random.shuffle(urls)
+        print(f"  GitHub API: {len(urls)} imágenes encontradas en dharmx/walls")
+        return urls[:max_urls]
+    except Exception as e:
+        print(f"  ⚠️  GitHub API no disponible ({e}). Las publicaciones no tendrán fotos.")
+        return []
+
+
+def seed_fotos(conn, ids_usuarios: list):
+    """Paso independiente: poblar fotografias y asignarlas a publicaciones."""
+    print("Obteniendo imágenes de GitHub (dharmx/walls)...")
+    image_urls = obtener_urls_github()
+    if not image_urls:
+        print("  ⏭️  Paso de fotografías omitido (sin acceso a GitHub)")
+        return
+
+    foto_batch = [
+        (random.choice(ids_usuarios), url, random.choice(DESCRIPCIONES_FOTO))
+        for url in image_urls
+    ]
+    print(f"  Insertando {len(foto_batch)} fotografías...")
+    with conn.cursor() as cur:
+        cur.executemany(
+            "INSERT INTO fotografias (id_usuario, ruta_imagen, descripcion) "
+            "VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
+            foto_batch
+        )
+    conn.commit()
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT id_foto FROM fotografias ORDER BY id_foto")
+        ids_fotos = [r[0] for r in cur.fetchall()]
+    print(f"  ✅ {len(ids_fotos)} fotografías en BD")
+
+    print(f"  Asignando fotos a ~{int(PORCENTAJE_CON_FOTO*100)}% de publicaciones...")
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM publicaciones ORDER BY RANDOM() LIMIT %s",
+            (int(TOTAL_PUBLICACIONES * PORCENTAJE_CON_FOTO),)
+        )
+        pubs_con_foto = [r[0] for r in cur.fetchall()]
+
+    with conn.cursor() as cur:
+        cur.executemany(
+            "UPDATE publicaciones SET id_foto = %s WHERE id = %s",
+            [(random.choice(ids_fotos), pid) for pid in pubs_con_foto]
+        )
+    conn.commit()
+    print(f"  ✅ {len(pubs_con_foto)} publicaciones con foto asignada")
 
 
 def seed(forzar: bool = False):
@@ -110,14 +187,25 @@ def seed(forzar: bool = False):
         n_usuarios = cur.fetchone()[0]
         cur.execute("SELECT COUNT(*) FROM publicaciones")
         n_pubs = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM fotografias")
+        n_fotos = cur.fetchone()[0]
 
+    # Si ya hay usuarios y pubs pero NO hay fotos → solo poblar fotos
     if not forzar and n_usuarios >= TOTAL_USUARIOS and n_pubs >= TOTAL_PUBLICACIONES:
-        print(f"⚠️  La BD ya tiene {n_usuarios} usuarios y {n_pubs} publicaciones.")
+        if n_fotos == 0:
+            print(f"  Usuarios y publicaciones ya existen ({n_usuarios}/{n_pubs}). Poblando solo fotografías...")
+            with conn.cursor() as cur:
+                cur.execute("SELECT id_usuario FROM usuarios ORDER BY id_usuario")
+                ids_usuarios = [r[0] for r in cur.fetchall()]
+            seed_fotos(conn, ids_usuarios)
+            conn.close()
+            return
+        print(f"⚠️  La BD ya tiene {n_usuarios} usuarios, {n_pubs} publicaciones y {n_fotos} fotos.")
         print("   Usa forzar=True (o el botón 'Forzar repoblación') para agregar más.")
         conn.close()
         return
 
-    print(f"Estado actual: {n_usuarios} usuarios, {n_pubs} publicaciones")
+    print(f"Estado actual: {n_usuarios} usuarios, {n_pubs} publicaciones, {n_fotos} fotos")
 
     # ── 1. Usuarios ───────────────────────────────────────────
     print(f"Insertando {TOTAL_USUARIOS} usuarios...")
@@ -180,7 +268,7 @@ def seed(forzar: bool = False):
         ids_usuarios = [r[0] for r in cur.fetchall()]
     print(f"  Total usuarios en BD: {len(ids_usuarios)}")
 
-    # ── 4. Publicaciones ──────────────────────────────────────
+    # ── 4. Publicaciones (sin foto por ahora) ─────────────────
     print(f"Insertando {TOTAL_PUBLICACIONES} publicaciones...")
     pub_batch = []
     for i in range(TOTAL_PUBLICACIONES):
@@ -218,7 +306,15 @@ def seed(forzar: bool = False):
         conn.commit()
     print(f"\n  ✅ Publicaciones completadas")
 
-    # ── 5. Seguidores ─────────────────────────────────────────
+    # ── 5. Fotografías desde GitHub dharmx/walls ──────────────
+    seed_fotos(conn, ids_usuarios)
+
+    # ── 6. IDs de publicaciones para likes y comentarios ──────
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM publicaciones ORDER BY RANDOM() LIMIT 1000")
+        pub_ids = [r[0] for r in cur.fetchall()]
+
+    # ── 7. Seguidores ─────────────────────────────────────────
     print("Generando relaciones de seguidores...")
     seg_batch = set()
     sample = random.sample(ids_usuarios, min(500, len(ids_usuarios)))
@@ -236,11 +332,8 @@ def seed(forzar: bool = False):
     conn.commit()
     print(f"  ✅ {len(seg_batch)} relaciones de seguidores")
 
-    # ── 6. Likes en publicaciones ─────────────────────────────
+    # ── 8. Likes en publicaciones ─────────────────────────────
     print("Generando likes...")
-    with conn.cursor() as cur:
-        cur.execute("SELECT id FROM publicaciones ORDER BY RANDOM() LIMIT 1000")
-        pub_ids = [r[0] for r in cur.fetchall()]
     likes_batch = set()
     for pid in pub_ids:
         for _ in range(random.randint(0, 15)):
@@ -255,7 +348,7 @@ def seed(forzar: bool = False):
     conn.commit()
     print(f"  ✅ {len(likes_batch)} likes generados")
 
-    # ── 7. Comentarios ────────────────────────────────────────
+    # ── 9. Comentarios ────────────────────────────────────────
     print("Generando comentarios...")
     frases = [
         "Excelente investigación.", "Muy interesante, gracias por compartir.",
