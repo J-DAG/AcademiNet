@@ -16,6 +16,8 @@ CREATE INDEX IF NOT EXISTS idx_com_usuario      ON comentarios (id_usuario);
 
 -- fotografias
 CREATE INDEX IF NOT EXISTS idx_foto_usuario     ON fotografias (id_usuario);
+CREATE INDEX IF NOT EXISTS idx_com_foto_fecha   ON comentarios_foto (id_foto, fecha_comentario DESC);
+CREATE INDEX IF NOT EXISTS idx_like_foto        ON likes_fotografias (id_foto);
 
 -- likes_publicaciones
 CREATE INDEX IF NOT EXISTS idx_likes_pub_pub    ON likes_publicaciones (id_publicacion);
@@ -59,7 +61,7 @@ CREATE INDEX IF NOT EXISTS idx_tc_destino       ON transferencias_creditos (id_u
 -- CONSULTA C
 -- EXPLAIN ANALYZE
 -- SELECT p.id, p.titulo, (u.nombres||' '||u.apellidos) AS autor,
---        f.ruta_imagen,
+--        f.id_foto,
 --        COUNT(DISTINCT lp.id_like) + COUNT(DISTINCT c.id_comentario) AS total_interacciones
 -- FROM publicaciones p
 -- JOIN fotografias f ON f.id_foto = p.id_foto
@@ -67,5 +69,5 @@ CREATE INDEX IF NOT EXISTS idx_tc_destino       ON transferencias_creditos (id_u
 -- LEFT JOIN likes_publicaciones lp ON lp.id_publicacion = p.id
 -- LEFT JOIN comentarios c ON c.id_publicacion = p.id
 -- WHERE p.estado = 'activo'
--- GROUP BY p.id, p.titulo, autor, f.ruta_imagen
+-- GROUP BY p.id, p.titulo, autor, f.id_foto
 -- ORDER BY total_interacciones DESC LIMIT 20;

@@ -3,9 +3,17 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.requests import Request
 from fastapi.responses import HTMLResponse
+from contextlib import asynccontextmanager
 import os
 
 from app.routers import users, publications, photos, accounts, admin
+from app.database import close_pool, get_cursor
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    yield
+    close_pool()
 
 app = FastAPI(
     title="AcademiNet API",
@@ -13,6 +21,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # Archivos estáticos
@@ -60,5 +69,9 @@ async def page_fotografias(request: Request):
 
 
 @app.get("/health")
-async def health():
-    return {"status": "ok", "app": "AcademiNet"}
+def health():
+    """Comprueba aplicación y PostgreSQL; un fallo genera HTTP 500."""
+    with get_cursor() as cur:
+        cur.execute("SELECT 1 AS ok")
+        database_ok = cur.fetchone()["ok"] == 1
+    return {"status": "ok", "app": "AcademiNet", "database": database_ok}

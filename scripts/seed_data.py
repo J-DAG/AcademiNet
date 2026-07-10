@@ -1,14 +1,14 @@
 """
 seed_data.py — Generación masiva de datos para AcademiNet
 Genera: 10,000 usuarios + 10,000 cuentas + 100,000 publicaciones
-        + fotografías (URLs de dharmx/walls) + comentarios + likes
+        + fotografías locales almacenadas como BYTEA + comentarios + likes
 
 Ejecución directa:  python scripts/seed_data.py
 También invocado desde el botón "Poblar" en el panel Admin.
 """
 
-import os, sys, random, time, json
-import urllib.request
+import os, sys, random, time, hashlib, mimetypes
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -73,6 +73,10 @@ TITULOS_MICRO = [
     "Convocatoria a colaboradores para paper en revisión",
     "Compartiendo resultados preliminares del experimento",
     "¿Cuál es el futuro de la investigación abierta?",
+    "Actualización semanal del proyecto de investigación",
+    "Resultado esperado para la siguiente fase experimental",
+    "Primeros hallazgos después de procesar las muestras",
+    "Cambio aplicado al protocolo de recolección de datos",
 ]
 CONTENIDOS = [
     "Este trabajo presenta una revisión sistemática de la literatura existente.",
@@ -82,6 +86,10 @@ CONTENIDOS = [
     "La validación se realizó con un dataset de 50,000 muestras etiquetadas.",
     "Trabajo en progreso, abierto a colaboraciones y revisiones.",
     "Agradezco a la Universidad de Cuenca por el financiamiento de esta investigación.",
+    "Esperamos validar la hipótesis principal durante la siguiente fase de la investigación.",
+    "La recolección de datos alcanzó el 70% y no se reportan desviaciones importantes.",
+    "Actualizamos el procedimiento experimental a partir de las observaciones del equipo revisor.",
+    "Los resultados preliminares coinciden con el comportamiento esperado del modelo propuesto.",
     None,
 ]
 DESCRIPCIONES_FOTO = [
@@ -111,52 +119,41 @@ def batch_insert(cur, sql: str, data: list):
     cur.executemany(sql, data)
 
 
-def obtener_urls_github(max_urls: int = MAX_FOTOS_SEED) -> list[str]:
-    """Obtiene URLs de imágenes raw del repositorio dharmx/walls vía GitHub API."""
-    api_url = "https://api.github.com/repos/dharmx/walls/git/trees/main?recursive=1"
-    try:
-        req = urllib.request.Request(api_url, headers={"User-Agent": "AcademiNet-seed/1.0"})
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            data = json.loads(resp.read())
-        extensiones = {".jpg", ".jpeg", ".png", ".webp"}
-        base = "https://raw.githubusercontent.com/dharmx/walls/main/"
-        urls = [
-            base + item["path"]
-            for item in data.get("tree", [])
-            if item["type"] == "blob"
-            and any(item["path"].lower().endswith(ext) for ext in extensiones)
-        ]
-        random.shuffle(urls)
-        print(f"  GitHub API: {len(urls)} imágenes encontradas en dharmx/walls")
-        return urls[:max_urls]
-    except Exception as e:
-        print(f"  ⚠️  GitHub API no disponible ({e}). Las publicaciones no tendrán fotos.")
-        return []
-
-
 def seed_fotos(conn, ids_usuarios: list):
     """Paso independiente: poblar fotografias y asignarlas a publicaciones."""
-    print("Obteniendo imágenes de GitHub (dharmx/walls)...")
-    image_urls = obtener_urls_github()
-    if not image_urls:
-        print("  ⏭️  Paso de fotografías omitido (sin acceso a GitHub)")
+    carpeta = Path(__file__).resolve().parents[1] / "imagenes"
+    archivos = [p for p in carpeta.rglob("*") if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}]
+    random.shuffle(archivos)
+    archivos = archivos[:MAX_FOTOS_SEED]
+    if not archivos:
+        print("  ⏭️  Paso de fotografías omitido: carpeta imagenes/ vacía")
         return
 
-    foto_batch = [
-        (random.choice(ids_usuarios), url, random.choice(DESCRIPCIONES_FOTO))
-        for url in image_urls
-    ]
-    print(f"  Insertando {len(foto_batch)} fotografías...")
-    with conn.cursor() as cur:
-        cur.executemany(
-            "INSERT INTO fotografias (id_usuario, ruta_imagen, descripcion) "
-            "VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
-            foto_batch
-        )
-    conn.commit()
+    print(f"  Cargando {len(archivos)} imágenes locales sin reprocesarlas...", flush=True)
+    insertadas = omitidas = 0
+    for indice, ruta in enumerate(archivos, start=1):
+        original = ruta.read_bytes()
+        if len(original) <= 25 * 1024 * 1024:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO fotografias (id_usuario, objeto, nombre_archivo, tipo_mime, tamano_bytes, hash_sha256, descripcion) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING RETURNING id_foto",
+                    (random.choice(ids_usuarios), original, ruta.name,
+                     mimetypes.guess_type(ruta.name)[0] or "application/octet-stream", len(original),
+                     hashlib.sha256(original).hexdigest(), random.choice(DESCRIPCIONES_FOTO))
+                )
+                if cur.fetchone():
+                    insertadas += 1
+                else:
+                    omitidas += 1
+            conn.commit()
+        else:
+            omitidas += 1
+        print(f"  Imagen {indice}/{len(archivos)}: {ruta.name} ({len(original) / 1024:.1f} KB)", flush=True)
+    print(f"  ✅ Carga terminada: {insertadas} insertadas, {omitidas} omitidas", flush=True)
 
     with conn.cursor() as cur:
-        cur.execute("SELECT id_foto FROM fotografias ORDER BY id_foto")
+        cur.execute("SELECT id_foto FROM fotografias WHERE objeto IS NOT NULL ORDER BY id_foto")
         ids_fotos = [r[0] for r in cur.fetchall()]
     print(f"  ✅ {len(ids_fotos)} fotografías en BD")
 
@@ -306,7 +303,7 @@ def seed(forzar: bool = False):
         conn.commit()
     print(f"\n  ✅ Publicaciones completadas")
 
-    # ── 5. Fotografías desde GitHub dharmx/walls ──────────────
+    # ── 5. Fotografías locales desde imagenes/ ────────────────
     seed_fotos(conn, ids_usuarios)
 
     # ── 6. IDs de publicaciones para likes y comentarios ──────

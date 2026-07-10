@@ -4,6 +4,17 @@ Red Social Universitaria · Universidad de Cuenca · Base de Datos II
 
 ---
 
+## Verificación automática
+
+```bash
+python -m pytest -q
+```
+
+Las pruebas validan el contrato OpenAPI, los dominios de entrada y los límites de
+paginación sin necesitar una base activa. `GET /health` comprueba además PostgreSQL.
+
+---
+
 ## Requisitos previos
 
 | Requisito | Versión usada |
@@ -115,6 +126,10 @@ La página principal muestra:
    - **ID Autor** — el `id_usuario` del usuario que publica.
    - **Contenido** — opcional.
 3. Haz clic en **Publicar**.
+
+La fotografía es opcional. Una publicación puede contener únicamente texto para
+comunicar un resultado esperado, un avance, un hallazgo o una actualización de la
+investigación. Durante la población masiva solo cerca del 35% recibe una imagen local.
 
 > El trigger `trg_antispam_publicaciones` impide publicar más de 5 veces en un minuto. Si se supera el límite, la API devuelve un error descriptivo.
 
@@ -236,6 +251,12 @@ python run.py
 
 # Poblar datos manualmente desde la terminal
 python scripts/seed_data.py
+
+# Importar la carpeta local imagenes/ como objetos BYTEA (reanudable)
+python scripts/import_images.py
+
+# Optimizar y generar miniaturas para fotografías ya almacenadas
+python scripts/optimize_existing_images.py
 
 # Poblar forzando un lote adicional
 SEED_FORZAR=1 python scripts/seed_data.py   # Linux/Mac

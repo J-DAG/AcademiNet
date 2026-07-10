@@ -101,3 +101,21 @@ DROP TRIGGER IF EXISTS trg_actualizar_seguidores ON seguidores;
 CREATE TRIGGER trg_actualizar_seguidores
     AFTER INSERT OR DELETE ON seguidores
     FOR EACH ROW EXECUTE FUNCTION fn_actualizar_seguidores();
+
+-- Mantiene fotografias.nro_likes consistente con la tabla intermedia.
+CREATE OR REPLACE FUNCTION fn_actualizar_likes_fotografia()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        UPDATE fotografias SET nro_likes = nro_likes + 1 WHERE id_foto = NEW.id_foto;
+    ELSE
+        UPDATE fotografias SET nro_likes = GREATEST(nro_likes - 1, 0) WHERE id_foto = OLD.id_foto;
+    END IF;
+    RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_actualizar_likes_fotografia ON likes_fotografias;
+CREATE TRIGGER trg_actualizar_likes_fotografia
+    AFTER INSERT OR DELETE ON likes_fotografias
+    FOR EACH ROW EXECUTE FUNCTION fn_actualizar_likes_fotografia();

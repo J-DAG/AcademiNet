@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from app.models.schemas import CuentaOut, CuentaUpdate, Respuesta
 from app.database import get_cursor
 
@@ -52,7 +52,7 @@ def obtener_creditos(id_usuario: int):
 
 
 @router.get("/{id_usuario}/auditoria")
-def auditoria_usuario(id_usuario: int, limit: int = 20):
+def auditoria_usuario(id_usuario: int, limit: int = Query(20, ge=1, le=100)):
     with get_cursor() as cur:
         cur.execute(
             "SELECT * FROM auditoria WHERE id_usuario = %s "

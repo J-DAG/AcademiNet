@@ -1,4 +1,5 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
+from typing import Literal
 from typing import Optional
 from datetime import datetime, date
 import re
@@ -7,13 +8,13 @@ import re
 # ── Usuarios ──────────────────────────────────────────────────
 class UsuarioCreate(BaseModel):
     cedula: str
-    apellidos: str
-    nombres: str
-    cargo: str
+    apellidos: str = Field(min_length=1, max_length=100)
+    nombres: str = Field(min_length=1, max_length=100)
+    cargo: Literal["profesor", "investigador"]
     email: Optional[str] = None
     fecha_nac: Optional[date] = None
-    tipo_cuenta: str = "regular"
-    privacidad: str = "publico"
+    tipo_cuenta: Literal["regular", "premium"] = "regular"
+    privacidad: Literal["publico", "privado"] = "publico"
 
     @field_validator("cargo")
     @classmethod
@@ -54,32 +55,39 @@ class CuentaOut(BaseModel):
 
 
 class CuentaUpdate(BaseModel):
-    tipo: Optional[str] = None
-    privacidad: Optional[str] = None
-    estado: Optional[str] = None
-    bio: Optional[str] = None
+    tipo: Optional[Literal["regular", "premium"]] = None
+    privacidad: Optional[Literal["publico", "privado"]] = None
+    estado: Optional[Literal["activo", "inactivo"]] = None
+    bio: Optional[str] = Field(default=None, max_length=1000)
 
 
 # ── Fotografías ───────────────────────────────────────────────
-class FotografiaCreate(BaseModel):
-    id_usuario: int
-    ruta_imagen: str
-    descripcion: Optional[str] = None
-
-
 class FotografiaOut(BaseModel):
     id_foto: int
     id_usuario: int
-    ruta_imagen: str
+    nombre_archivo: Optional[str]
+    tipo_mime: Optional[str]
+    tamano_bytes: Optional[int]
+    url_imagen: str
+    url_miniatura: str
     descripcion: Optional[str]
     fecha_subida: Optional[datetime]
+    nro_likes: int = 0
+
+
+class InteraccionFoto(BaseModel):
+    id_usuario: int = Field(gt=0)
+
+
+class ComentarioFotoCreate(InteraccionFoto):
+    contenido: str = Field(min_length=1, max_length=2000)
 
 
 # ── Publicaciones ─────────────────────────────────────────────
 class PublicacionCreate(BaseModel):
-    titulo: str
-    tipo: str
-    autor: int
+    titulo: str = Field(min_length=1, max_length=255)
+    tipo: Literal["paper", "microblog", "comentario"]
+    autor: int = Field(gt=0)
     contenido: Optional[str] = None
     id_foto: Optional[int] = None       # FK opcional a fotografias
 
@@ -97,7 +105,7 @@ class PublicacionOut(BaseModel):
     tipo: str
     autor: int
     id_foto: Optional[int]
-    ruta_imagen: Optional[str]          # joined desde fotografias
+    ruta_imagen: Optional[str]          # endpoint que entrega el BYTEA
     fecha_publicacion: datetime
     nro_citaciones: int
     contenido: Optional[str]
@@ -134,7 +142,7 @@ class CitacionCreate(BaseModel):
 class SimularFallo(BaseModel):
     id_usuario_origen: int
     id_usuario_destino: int
-    monto: int
+    monto: int = Field(gt=0)
     forzar_fallo: bool = False
 
 

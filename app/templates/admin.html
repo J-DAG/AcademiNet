@@ -19,7 +19,8 @@
     <!-- Poblar datos -->
     <div class="card admin-card">
         <h2>🌱 Poblar Base de Datos</h2>
-        <p>Genera <strong>10,000 usuarios</strong> y <strong>100,000 publicaciones</strong> con datos ficticios.</p>
+        <p>Genera <strong>10,000 usuarios</strong>, <strong>100,000 publicaciones</strong> y carga las imágenes locales de <code>imagenes/</code> como objetos en PostgreSQL.</p>
+        <p style="font-size:.8rem;color:var(--text-muted)">Solo aproximadamente el 35% de las publicaciones tendrá una imagen; el resto representará papers, resultados, avances y actualizaciones textuales.</p>
         <p style="font-size:.8rem;color:var(--text-muted)">Si la BD ya tiene datos suficientes, el script los detecta y no duplica. Activa "Forzar" solo si quieres agregar otro lote.</p>
         <div class="toggle-row" style="margin-bottom:.75rem">
             <input type="checkbox" id="poblarForzar">

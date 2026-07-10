@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from app.models.schemas import UsuarioCreate, UsuarioOut, SeguirUsuario, Respuesta
 from app.database import get_cursor
 
@@ -22,7 +22,7 @@ def crear_usuario(data: UsuarioCreate):
 
 
 @router.get("/", response_model=list[UsuarioOut])
-def listar_usuarios(limit: int = 50, offset: int = 0):
+def listar_usuarios(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)):
     with get_cursor() as cur:
         cur.execute(
             "SELECT id_usuario, cedula, apellidos, nombres, cargo, email, created_at "

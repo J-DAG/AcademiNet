@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from app.models.schemas import (
     PublicacionCreate, PublicacionOut, ComentarioCreate, ComentarioOut,
     LikePublicacion, CitacionCreate, SimularFallo, Respuesta
@@ -10,7 +10,8 @@ router = APIRouter(prefix="/publicaciones", tags=["Publicaciones"])
 # SQL base para traer publicaciones con su foto adjunta
 _SELECT_PUB = """
     SELECT p.id, p.titulo, p.tipo, p.autor, p.id_foto,
-           f.ruta_imagen, p.fecha_publicacion, p.nro_citaciones,
+           CASE WHEN f.id_foto IS NOT NULL THEN '/api/fotografias/' || f.id_foto || '/miniatura' END AS ruta_imagen,
+           p.fecha_publicacion, p.nro_citaciones,
            p.contenido, p.estado
     FROM publicaciones p
     LEFT JOIN fotografias f ON f.id_foto = p.id_foto
@@ -31,7 +32,11 @@ def crear_publicacion(data: PublicacionCreate):
 
 
 @router.get("/", response_model=list[PublicacionOut])
-def listar_publicaciones(limit: int = 20, offset: int = 0, tipo: str = None):
+def listar_publicaciones(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    tipo: str | None = Query(None, pattern="^(paper|microblog|comentario)$"),
+):
     with get_cursor() as cur:
         if tipo:
             cur.execute(

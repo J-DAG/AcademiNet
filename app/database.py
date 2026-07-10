@@ -30,6 +30,14 @@ def get_pool() -> psycopg_pool.ConnectionPool:
     return _pool
 
 
+def close_pool() -> None:
+    """Cierra limpiamente los workers del pool al apagar la aplicación."""
+    global _pool
+    if _pool is not None:
+        _pool.close()
+        _pool = None
+
+
 @contextmanager
 def get_conn():
     with get_pool().connection() as conn:

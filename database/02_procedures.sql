@@ -66,6 +66,7 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     v_autor INT;
+    v_creditos INT;
 BEGIN
     SELECT autor INTO v_autor
     FROM publicaciones
@@ -86,9 +87,19 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'mensaje', 'Ya diste like a esta publicación.');
     END IF;
 
+    PERFORM 1 FROM cuentas
+    WHERE id_usuario IN (p_id_usuario, v_autor)
+    ORDER BY id_usuario FOR UPDATE;
+
+    SELECT creditos INTO v_creditos FROM cuentas WHERE id_usuario = p_id_usuario;
+    IF NOT FOUND OR v_creditos < 1 THEN
+        RETURN jsonb_build_object('success', false, 'mensaje', 'Créditos insuficientes para dar like.');
+    END IF;
+
     INSERT INTO likes_publicaciones (id_publicacion, id_usuario)
     VALUES (p_id_publicacion, p_id_usuario);
 
+    UPDATE cuentas SET creditos = creditos - 1 WHERE id_usuario = p_id_usuario;
     UPDATE cuentas SET creditos = creditos + 1 WHERE id_usuario = v_autor;
 
     INSERT INTO transferencias_creditos (id_usuario_origen, id_usuario_destino, monto, tipo_accion, id_referencia)
@@ -117,6 +128,9 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     v_autor_citado INT;
+    v_autor_origen INT;
+    v_creditos INT;
+    v_insertada INT;
 BEGIN
     SELECT autor INTO v_autor_citado
     FROM publicaciones
@@ -130,12 +144,35 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'mensaje', 'No puedes citar tu propia publicación.');
     END IF;
 
+    SELECT autor INTO v_autor_origen FROM publicaciones
+    WHERE id = p_pub_origen AND estado = 'activo';
+    IF NOT FOUND OR v_autor_origen <> p_id_usuario THEN
+        RETURN jsonb_build_object('success', false, 'mensaje', 'La publicación de origen no pertenece al usuario o no está activa.');
+    END IF;
+    IF p_pub_origen = p_pub_destino THEN
+        RETURN jsonb_build_object('success', false, 'mensaje', 'Una publicación no puede citarse a sí misma.');
+    END IF;
+
+    PERFORM 1 FROM cuentas
+    WHERE id_usuario IN (p_id_usuario, v_autor_citado)
+    ORDER BY id_usuario FOR UPDATE;
+    SELECT creditos INTO v_creditos FROM cuentas WHERE id_usuario = p_id_usuario;
+    IF v_creditos < 2 THEN
+        RETURN jsonb_build_object('success', false, 'mensaje', 'Créditos insuficientes para citar.');
+    END IF;
+
     INSERT INTO citaciones (id_publicacion_src, id_publicacion_dst, id_usuario)
     VALUES (p_pub_origen, p_pub_destino, p_id_usuario)
     ON CONFLICT (id_publicacion_src, id_publicacion_dst) DO NOTHING;
 
+    GET DIAGNOSTICS v_insertada = ROW_COUNT;
+    IF v_insertada = 0 THEN
+        RETURN jsonb_build_object('success', false, 'mensaje', 'Esta citación ya existe.');
+    END IF;
+
     UPDATE publicaciones SET nro_citaciones = nro_citaciones + 1 WHERE id = p_pub_destino;
 
+    UPDATE cuentas SET creditos = creditos - 2 WHERE id_usuario = p_id_usuario;
     UPDATE cuentas SET creditos = creditos + 2 WHERE id_usuario = v_autor_citado;
 
     INSERT INTO transferencias_creditos (id_usuario_origen, id_usuario_destino, monto, tipo_accion, id_referencia)
@@ -193,6 +230,16 @@ RETURNS JSONB
 LANGUAGE plpgsql
 AS $$
 BEGIN
+    IF p_monto <= 0 OR p_id_usuario_origen = p_id_usuario_destino THEN
+        RETURN jsonb_build_object('success', false, 'mensaje', 'Transferencia inválida.');
+    END IF;
+    PERFORM 1 FROM cuentas
+    WHERE id_usuario IN (p_id_usuario_origen, p_id_usuario_destino)
+    ORDER BY id_usuario FOR UPDATE;
+    IF COALESCE((SELECT creditos FROM cuentas WHERE id_usuario = p_id_usuario_origen), -1) < p_monto THEN
+        RETURN jsonb_build_object('success', false, 'mensaje', 'Créditos insuficientes.');
+    END IF;
+
     UPDATE cuentas SET creditos = creditos - p_monto WHERE id_usuario = p_id_usuario_origen;
 
     IF p_forzar_fallo THEN
@@ -284,7 +331,7 @@ LANGUAGE sql AS $$
         p.id                                            AS id_pub,
         p.titulo,
         (u.nombres || ' ' || u.apellidos)::TEXT         AS nombre_autor,
-        f.ruta_imagen,
+        ('/api/fotografias/' || f.id_foto || '/archivo')::VARCHAR AS ruta_imagen,
         f.descripcion                                   AS descripcion_foto,
         COUNT(DISTINCT lp.id_like)                      AS nro_likes,
         COUNT(DISTINCT c.id_comentario)                 AS nro_comentarios,
@@ -295,7 +342,7 @@ LANGUAGE sql AS $$
     LEFT JOIN likes_publicaciones lp ON lp.id_publicacion = p.id
     LEFT JOIN comentarios c          ON c.id_publicacion  = p.id
     WHERE p.estado = 'activo'
-    GROUP BY p.id, p.titulo, nombre_autor, f.ruta_imagen, f.descripcion
+    GROUP BY p.id, p.titulo, nombre_autor, f.id_foto, f.descripcion
     ORDER BY total_interacciones DESC
     LIMIT 20;
 $$;

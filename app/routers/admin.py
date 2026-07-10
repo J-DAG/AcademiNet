@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Query
 from app.database import get_cursor, init_db
 from app.models.schemas import Respuesta
 import subprocess, sys, os
@@ -26,6 +26,10 @@ def poblar_base(background_tasks: BackgroundTasks, forzar: bool = False):
     forzar=false (default): omite si la BD ya tiene 10K usuarios y 100K publicaciones.
     forzar=true: agrega otro lote aunque ya haya datos.
     """
+    # El botón es autosuficiente: garantiza primero que esquema, funciones,
+    # triggers e índices estén instalados.
+    init_db()
+
     def _run(forzar_flag: bool):
         script = os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "seed_data.py")
         env = os.environ.copy()
@@ -57,7 +61,7 @@ def estadisticas():
 
 
 @router.get("/auditoria")
-def log_auditoria(limit: int = 50, offset: int = 0):
+def log_auditoria(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)):
     with get_cursor() as cur:
         cur.execute(
             "SELECT * FROM auditoria ORDER BY fecha_evento DESC LIMIT %s OFFSET %s",

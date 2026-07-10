@@ -7,12 +7,11 @@
     <button class="btn btn-primary" onclick="toggleForm('formFoto')">+ Registrar Foto</button>
 </div>
 
-<!-- Formulario: registrar URL de foto -->
+<!-- Formulario: cargar objeto binario -->
 <div id="formFoto" class="card form-card hidden">
-    <h2>Registrar Fotografía por URL</h2>
+    <h2>Cargar fotografía</h2>
     <p style="color:var(--text-secondary);font-size:.88rem;margin-bottom:1rem">
-        Ingresa la URL raw de una imagen del repositorio <strong>dharmx/walls</strong>
-        (https://raw.githubusercontent.com/dharmx/walls/main/…)
+        La imagen se almacenará directamente como un objeto BYTEA en PostgreSQL.
     </p>
     <form onsubmit="registrarFoto(event)">
         <div class="form-grid">
@@ -26,9 +25,8 @@
             </div>
         </div>
         <div class="form-group">
-            <label>URL de imagen *</label>
-            <input type="url" id="fotoUrl" required
-                   placeholder="https://raw.githubusercontent.com/dharmx/walls/main/…">
+            <label>Archivo de imagen *</label>
+            <input type="file" id="fotoArchivo" required accept="image/jpeg,image/png,image/webp">
         </div>
         <!-- Preview de la URL -->
         <div id="urlPreviewWrap" class="foto-preview-wrap hidden" style="margin:.5rem 0 1rem">
@@ -36,7 +34,6 @@
                  onerror="this.style.display='none'" style="max-height:160px;border-radius:8px">
         </div>
         <div class="form-actions">
-            <button type="button" class="btn btn-ghost" onclick="previewUrl()">Vista previa</button>
             <button type="submit" class="btn btn-primary">Registrar</button>
             <button type="button" class="btn btn-ghost" onclick="toggleForm('formFoto')">Cancelar</button>
         </div>
@@ -83,26 +80,15 @@ let pagina = 0;
 const limit = 12;
 let endpointActual = () => `/api/fotografias/?limit=${limit}&offset=${pagina * limit}`;
 
-function previewUrl() {
-    const url = document.getElementById('fotoUrl').value.trim();
-    if (!url) return;
-    const img = document.getElementById('urlPreviewImg');
-    img.style.display = 'block';
-    img.src = url;
-    document.getElementById('urlPreviewWrap').classList.remove('hidden');
-}
-
 async function registrarFoto(e) {
     e.preventDefault();
-    const body = {
-        id_usuario: parseInt(document.getElementById('fotoUsuario').value),
-        ruta_imagen: document.getElementById('fotoUrl').value.trim(),
-        descripcion: document.getElementById('fotoDesc').value.trim() || null
-    };
+    const body = new FormData();
+    body.append('id_usuario', document.getElementById('fotoUsuario').value);
+    body.append('descripcion', document.getElementById('fotoDesc').value.trim());
+    body.append('archivo', document.getElementById('fotoArchivo').files[0]);
     const res = await fetch('/api/fotografias/', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body)
+        body
     });
     if (res.ok) {
         showToast('✅ Fotografía registrada correctamente', true);
@@ -131,9 +117,9 @@ async function cargarFotos() {
     }
 
     galeria.innerHTML = data.map(f => `
-        <div class="foto-card" onclick="abrirFoto('${escHtml(f.ruta_imagen)}', '${escHtml(f.descripcion || '')}', ${f.id_usuario}, ${f.id_foto})">
+        <div class="foto-card" onclick="abrirFoto('${escHtml(f.url_imagen)}', '${escHtml(f.descripcion || '')}', ${f.id_usuario}, ${f.id_foto})">
             <div class="foto-thumb-wrap">
-                <img src="${escHtml(f.ruta_imagen)}"
+                <img src="${escHtml(f.url_miniatura)}"
                      alt="${escHtml(f.descripcion || 'Fotografía')}"
                      class="foto-thumb"
                      loading="lazy"

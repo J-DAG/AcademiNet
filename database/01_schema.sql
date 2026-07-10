@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS cuentas (
     id_cuenta         SERIAL PRIMARY KEY,
-    id_usuario        INT NOT NULL REFERENCES usuarios(id_usuario) ON DELETE CASCADE ON UPDATE CASCADE,
+    id_usuario        INT NOT NULL UNIQUE REFERENCES usuarios(id_usuario) ON DELETE CASCADE ON UPDATE CASCADE,
     tipo              VARCHAR(10) NOT NULL DEFAULT 'regular' CHECK (tipo IN ('regular', 'premium')),
     fecha_creacion    TIMESTAMP  NOT NULL DEFAULT NOW(),
     numero_seguidores INT        NOT NULL DEFAULT 0 CHECK (numero_seguidores >= 0),
@@ -30,21 +30,58 @@ CREATE TABLE IF NOT EXISTS cuentas (
     estado            VARCHAR(10) NOT NULL DEFAULT 'activo'  CHECK (estado IN ('activo', 'inactivo')),
     foto_perfil       VARCHAR(500),
     bio               TEXT,
-    creditos          INT        NOT NULL DEFAULT 0 CHECK (creditos >= 0)
+    creditos          INT        NOT NULL DEFAULT 100 CHECK (creditos >= 0)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS uq_cuentas_id_usuario ON cuentas (id_usuario);
+ALTER TABLE cuentas ALTER COLUMN creditos SET DEFAULT 100;
 
 -- ============================================================
 -- TABLA: fotografias
--- Almacena la URL (raw GitHub) de la imagen y metadatos.
+-- Almacena la imagen como BYTEA y sus metadatos.
 -- Una fotografía puede estar adjunta a una publicación (relación
 -- definida en publicaciones.id_foto).
 -- ============================================================
 CREATE TABLE IF NOT EXISTS fotografias (
     id_foto      SERIAL PRIMARY KEY,
     id_usuario   INT          NOT NULL REFERENCES usuarios(id_usuario) ON DELETE CASCADE ON UPDATE CASCADE,
-    ruta_imagen  VARCHAR(500) NOT NULL,
+    ruta_imagen  VARCHAR(500), -- legado: ya no se usa para nuevas fotografías
+    objeto       BYTEA,
+    nombre_archivo VARCHAR(255),
+    tipo_mime    VARCHAR(100),
+    tamano_bytes BIGINT CHECK (tamano_bytes >= 0),
+    hash_sha256  CHAR(64),
+    miniatura    BYTEA,
+    tipo_mime_miniatura VARCHAR(100),
     descripcion  TEXT,
-    fecha_subida TIMESTAMP DEFAULT NOW()
+    fecha_subida TIMESTAMP NOT NULL DEFAULT NOW(),
+    nro_likes    INT NOT NULL DEFAULT 0 CHECK (nro_likes >= 0)
+);
+ALTER TABLE fotografias ADD COLUMN IF NOT EXISTS nro_likes INT NOT NULL DEFAULT 0;
+ALTER TABLE fotografias ADD COLUMN IF NOT EXISTS objeto BYTEA;
+ALTER TABLE fotografias ADD COLUMN IF NOT EXISTS nombre_archivo VARCHAR(255);
+ALTER TABLE fotografias ADD COLUMN IF NOT EXISTS tipo_mime VARCHAR(100);
+ALTER TABLE fotografias ADD COLUMN IF NOT EXISTS tamano_bytes BIGINT;
+ALTER TABLE fotografias ADD COLUMN IF NOT EXISTS hash_sha256 CHAR(64);
+ALTER TABLE fotografias ADD COLUMN IF NOT EXISTS miniatura BYTEA;
+ALTER TABLE fotografias ADD COLUMN IF NOT EXISTS tipo_mime_miniatura VARCHAR(100);
+ALTER TABLE fotografias ALTER COLUMN ruta_imagen DROP NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_fotografias_hash ON fotografias (hash_sha256) WHERE hash_sha256 IS NOT NULL;
+
+-- Interacciones propias de fotografías exigidas por el modelo relacional.
+CREATE TABLE IF NOT EXISTS comentarios_foto (
+    id_comentario_foto SERIAL PRIMARY KEY,
+    id_foto            INT NOT NULL REFERENCES fotografias(id_foto) ON DELETE CASCADE ON UPDATE CASCADE,
+    id_usuario         INT NOT NULL REFERENCES usuarios(id_usuario) ON DELETE CASCADE ON UPDATE CASCADE,
+    contenido          TEXT NOT NULL CHECK (btrim(contenido) <> ''),
+    fecha_comentario   TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS likes_fotografias (
+    id_like_foto INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id_foto      INT NOT NULL REFERENCES fotografias(id_foto) ON DELETE CASCADE ON UPDATE CASCADE,
+    id_usuario   INT NOT NULL REFERENCES usuarios(id_usuario) ON DELETE CASCADE ON UPDATE CASCADE,
+    fecha_like   TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE (id_foto, id_usuario)
 );
 
 -- ============================================================
