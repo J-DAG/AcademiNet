@@ -117,6 +117,8 @@ La página principal muestra:
 
 - **Estadísticas en tiempo real** — contadores de usuarios, publicaciones, comentarios, likes y eventos de auditoría. Se cargan automáticamente desde `/api/admin/estadisticas`.
 - **Tarjetas de módulos** — descripción rápida de cada funcionalidad implementada (ACID, concurrencia, triggers, indexación, etc.).
+  Incluyen el estado actual de fotografías BYTEA, auditoría de operaciones reales,
+  eliminación lógica, consultas con EXPLAIN y top de fotógrafos.
 
 ---
 
