@@ -42,7 +42,7 @@ El sistema permitirá:
 * **Procedimientos y Funciones:** La lógica crítica de negocio debe ejecutarse mediante funciones almacenadas (PL/pgSQL en PostgreSQL o PL/SQL en Oracle).
   * *Ejemplo:* Un procedimiento `RegistrarUsuarioYCuenta(...)` que cree ambas entidades simultáneamente. **Este procedimiento debe capturar excepciones (como el intento de duplicar una cédula) y retornar un mensaje de error controlado a la aplicación.**
 * **Triggers de Auditoría y Control:** Implementar disparadores para reglas de negocio complejas:
-  * Registro automático en una tabla de auditoría cuando un usuario cambie su foto de perfil o elimine una publicación.
+  * Registro automático en una tabla de auditoría para operaciones relevantes, como eliminar una publicación, transferir créditos o registrar una fotografía.
   * Mecanismo anti-spam que impida a un usuario publicar más de 5 veces en un lapso de 1 minuto.
 
 ### 3. Transacciones y Propiedades ACID
@@ -135,8 +135,9 @@ Proyecto_BD2/
   - `consulta_top_fotografos()` → consulta B: top 10 fotógrafos con >50 comentarios último mes.
   - `consulta_fotos_mas_interacciones()` → consulta C: fotografías ordenadas por likes + comentarios.
 - `03_triggers.sql` — 5 triggers:
-  - `trg_auditoria_foto_perfil` → registra en `auditoria` cuando cambia `foto_perfil`.
   - `trg_auditoria_eliminacion` → registra el soft delete de publicaciones.
+  - `trg_auditoria_transferencia_creditos` → registra transferencias confirmadas de créditos.
+  - `trg_auditoria_registro_fotografia` → registra fotografías nuevas sin duplicar el objeto BYTEA.
   - `trg_antispam_publicaciones` → `BEFORE INSERT`; lanza excepción si el usuario publicó ≥5 veces en el último minuto.
   - `trg_actualizar_seguidores` → `AFTER INSERT/DELETE` en `seguidores`; actualiza `numero_seguidores`.
   - `trg_actualizar_likes_foto` → `AFTER INSERT/DELETE` en `likes_fotografias`; actualiza `nro_likes`.

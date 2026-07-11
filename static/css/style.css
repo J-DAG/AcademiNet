@@ -299,6 +299,44 @@ body {
 .admin-card h2 { font-size: 1rem; font-weight: 600; margin-bottom: .5rem; }
 .admin-card p  { font-size: .875rem; color: var(--text-muted); margin-bottom: 1rem; }
 .admin-card-wide { grid-column: 1 / -1; }
+
+/* El log conserva un tamaño estable aunque aumenten los eventos. */
+.auditoria-scroll {
+    max-height: 430px;
+    overflow-y: auto;
+    overflow-x: auto;
+    scrollbar-gutter: stable;
+}
+
+.auditoria-scroll .data-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--surface, #fff);
+    box-shadow: 0 1px 0 var(--border, #e2e8f0);
+}
+
+.consultas-opt-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+    margin: 1rem 0;
+}
+
+.consulta-opt-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem;
+    background: var(--bg);
+}
+
+.consulta-opt-card p { color: var(--text-muted); margin: .5rem 0 1rem; }
+.metricas-opt { display: flex; flex-wrap: wrap; gap: .6rem 1.2rem; margin: .75rem 0; }
+.consulta-result-scroll { max-height: 430px; overflow: auto; }
+
+@media (max-width: 850px) {
+    .consultas-opt-grid { grid-template-columns: 1fr; }
+}
 .consultas-btns { display: flex; gap: .75rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .result-box { margin-top: 1rem; font-size: .875rem; }
 .result-box .success { color: var(--success); }

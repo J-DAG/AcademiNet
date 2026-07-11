@@ -44,6 +44,16 @@ lock = threading.Lock()
 
 def obtener_publicacion_objetivo() -> int | None:
     with psycopg.connect(_conninfo) as conn:
+        id_solicitado = os.getenv("CONCURRENCY_PUBLICATION_ID")
+        if id_solicitado:
+            row = conn.execute(
+                "SELECT id FROM publicaciones WHERE id = %s AND estado = 'activo'",
+                (int(id_solicitado),),
+            ).fetchone()
+            if not row:
+                raise ValueError(f"La publicación #{id_solicitado} no existe o no está activa")
+            return row[0]
+
         row = conn.execute("""
             SELECT id_publicacion, COUNT(*) as cnt
             FROM comentarios
@@ -96,11 +106,15 @@ def worker_comentar(thread_id: int, id_usuario: int, id_publicacion: int):
         with lock:
             resultados["exitosos"] += 1
             resultados["tiempos"].append(elapsed)
+            completadas = resultados["exitosos"] + resultados["fallidos"]
+            print(f"Progreso: {completadas}/{NUM_THREADS} transacciones completadas", flush=True)
 
     except Exception as e:
         with lock:
             resultados["fallidos"] += 1
             resultados["errores"].append(str(e))
+            completadas = resultados["exitosos"] + resultados["fallidos"]
+            print(f"Progreso: {completadas}/{NUM_THREADS} transacciones completadas", flush=True)
 
 
 def run_concurrency_test():

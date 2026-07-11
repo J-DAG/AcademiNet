@@ -164,10 +164,11 @@ CREATE TABLE IF NOT EXISTS transferencias_creditos (
 CREATE TABLE IF NOT EXISTS auditoria (
     id_auditoria     SERIAL PRIMARY KEY,
     tabla_afectada   VARCHAR(50) NOT NULL,
-    operacion        VARCHAR(20) NOT NULL,
+    operacion        VARCHAR(40) NOT NULL,
     id_usuario       INT,
     descripcion      TEXT,
     datos_anteriores JSONB,
     datos_nuevos     JSONB,
     fecha_evento     TIMESTAMP DEFAULT NOW()
 );
+ALTER TABLE auditoria ALTER COLUMN operacion TYPE VARCHAR(40);

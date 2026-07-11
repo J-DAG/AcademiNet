@@ -199,8 +199,9 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     v_autor INT;
+    v_estado VARCHAR;
 BEGIN
-    SELECT autor INTO v_autor FROM publicaciones WHERE id = p_id_publicacion;
+    SELECT autor, estado INTO v_autor, v_estado FROM publicaciones WHERE id = p_id_publicacion;
 
     IF NOT FOUND THEN
         RETURN jsonb_build_object('success', false, 'mensaje', 'Publicación no encontrada.');
@@ -208,6 +209,10 @@ BEGIN
 
     IF v_autor <> p_id_usuario THEN
         RETURN jsonb_build_object('success', false, 'mensaje', 'Solo el autor puede eliminar su publicación.');
+    END IF;
+
+    IF v_estado = 'eliminado' THEN
+        RETURN jsonb_build_object('success', false, 'mensaje', 'La publicación ya está eliminada.');
     END IF;
 
     UPDATE publicaciones SET estado = 'eliminado' WHERE id = p_id_publicacion;
@@ -233,6 +238,7 @@ BEGIN
     IF p_monto <= 0 OR p_id_usuario_origen = p_id_usuario_destino THEN
         RETURN jsonb_build_object('success', false, 'mensaje', 'Transferencia inválida.');
     END IF;
+
     PERFORM 1 FROM cuentas
     WHERE id_usuario IN (p_id_usuario_origen, p_id_usuario_destino)
     ORDER BY id_usuario FOR UPDATE;

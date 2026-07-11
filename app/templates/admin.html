@@ -31,30 +31,50 @@
     </div>
 
     <!-- Prueba de concurrencia -->
-    <div class="card admin-card">
+    <div class="card admin-card admin-card-wide">
         <h2>⚡ Prueba de Concurrencia</h2>
         <p>Simula <strong>50 usuarios simultáneos</strong> comentando en la misma publicación.</p>
         <input type="number" id="pubConcurrencia" placeholder="ID publicación" class="input-sm">
-        <button class="btn btn-secondary" onclick="testConcurrencia()">Iniciar prueba</button>
+        <button id="btnConcurrencia" class="btn btn-secondary" onclick="testConcurrencia()">Iniciar prueba</button>
         <div id="resultConcurrencia" class="result-box"></div>
     </div>
 
     <!-- Simulación de fallo ACID -->
-    <div class="card admin-card">
+    <div class="card admin-card admin-card-wide">
         <h2>🔄 Demo ACID — Simulación de Fallo</h2>
-        <p>Demuestra que un fallo a mitad de la transferencia de créditos hace ROLLBACK automático.</p>
-        <div class="form-grid-2">
-            <input type="number" id="acidOrigen" placeholder="ID usuario origen" class="input-sm">
-            <input type="number" id="acidDestino" placeholder="ID usuario destino" class="input-sm">
-            <input type="number" id="acidMonto" placeholder="Monto" value="5" class="input-sm">
+        <p>Transfiere créditos entre dos cuentas y compara sus saldos antes y después.</p>
+        <ol style="font-size:.85rem;color:var(--text-secondary);padding-left:1.2rem;margin-bottom:1rem">
+            <li><strong>Origen:</strong> usuario que envía y pierde créditos.</li>
+            <li><strong>Destino:</strong> usuario que recibe los créditos.</li>
+            <li><strong>Monto:</strong> cantidad a transferir; el origen debe tener saldo suficiente.</li>
+        </ol>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>ID del usuario que envía (origen)</label>
+                <input type="number" id="acidOrigen" min="1" placeholder="Ej: 1" class="input-sm">
+            </div>
+            <div class="form-group">
+                <label>ID del usuario que recibe (destino)</label>
+                <input type="number" id="acidDestino" min="1" placeholder="Ej: 2" class="input-sm">
+            </div>
+            <div class="form-group">
+                <label>Créditos que se transferirán</label>
+                <input type="number" id="acidMonto" min="1" placeholder="Monto" value="5" class="input-sm">
+            </div>
         </div>
         <div class="toggle-row">
             <label>
-                <input type="checkbox" id="acidForzarFallo">
-                Forzar fallo (ROLLBACK demo)
+                <input type="checkbox" id="acidForzarFallo" onchange="actualizarExplicacionACID()">
+                Forzar un fallo después de descontar al origen
             </label>
         </div>
-        <button class="btn btn-danger" onclick="simularFallo()">Ejecutar</button>
+        <p id="explicacionACID" class="info" style="font-size:.82rem">
+            Operación normal: el origen perderá el monto y el destino lo recibirá.
+        </p>
+        <div class="form-actions">
+            <button class="btn btn-ghost" onclick="consultarSaldosACID()">Consultar saldos</button>
+            <button class="btn btn-danger" onclick="simularFallo()">Ejecutar demostración</button>
+        </div>
         <div id="resultACID" class="result-box"></div>
     </div>
 
@@ -62,18 +82,46 @@
     <div class="card admin-card admin-card-wide">
         <h2>📋 Log de Auditoría</h2>
         <button class="btn btn-ghost" onclick="cargarAuditoria()">Cargar eventos</button>
-        <div id="resultAuditoria" class="result-box"></div>
+        <div id="resultAuditoria" class="result-box auditoria-scroll"></div>
+    </div>
+
+    <!-- Demostración de eliminación auditada -->
+    <div class="card admin-card admin-card-wide">
+        <h2>🗑️ Eliminar Publicación y Auditar</h2>
+        <p>Realiza un borrado lógico y muestra inmediatamente el evento generado por el trigger.</p>
+        <div class="form-grid-2">
+            <div class="form-group">
+                <label>ID de la publicación</label>
+                <input type="number" id="adminEliminarPub" min="1" placeholder="Ej: 90975" class="input-sm">
+            </div>
+        </div>
+        <p style="font-size:.82rem;color:var(--text-muted)">La publicación se ocultará del feed, pero conservará comentarios, likes y demás relaciones históricas.</p>
+        <button class="btn btn-danger" onclick="eliminarPublicacionAdmin()">Eliminar y mostrar auditoría</button>
+        <div id="resultEliminarPub" class="result-box"></div>
     </div>
 
     <!-- Consultas complejas -->
     <div class="card admin-card admin-card-wide">
         <h2>🔍 Consultas de Optimización</h2>
-        <div class="consultas-btns">
-            <button class="btn btn-secondary" onclick="consultaA()">A: Usuarios activos</button>
-            <button class="btn btn-secondary" onclick="consultaB()">B: Top fotógrafos</button>
-            <button class="btn btn-secondary" onclick="consultaC()">C: Fotos más interacciones</button>
+        <div class="consultas-opt-grid">
+            <div class="consulta-opt-card">
+                <h3>A · Usuarios activos</h3>
+                <p>Usuarios con más de 10 publicaciones activas.</p>
+                <button class="btn btn-secondary" onclick="ejecutarConsulta('A')">Ejecutar y analizar</button>
+            </div>
+            <div class="consulta-opt-card">
+                <h3>B · Top fotógrafos</h3>
+                <p>Top 10 con fotografías y más de 50 comentarios en el último mes.</p>
+                <button class="btn btn-secondary" onclick="ejecutarConsulta('B')">Ejecutar y analizar</button>
+            </div>
+            <div class="consulta-opt-card">
+                <h3>C · Fotos con interacciones</h3>
+                <p>Publicaciones con foto ordenadas por likes y comentarios.</p>
+                <button class="btn btn-secondary" onclick="ejecutarConsulta('C')">Ejecutar y analizar</button>
+            </div>
         </div>
-        <div id="resultConsultas" class="result-box"></div>
+        <div id="resultPlanConsulta" class="result-box"></div>
+        <div id="resultConsultas" class="result-box consulta-result-scroll"></div>
     </div>
 
 </div>
@@ -96,10 +144,48 @@ async function poblarBD() {
 }
 
 async function testConcurrencia() {
-    document.getElementById('resultConcurrencia').innerHTML = '<p class="info">⏳ Ejecutando prueba...</p>';
-    const res = await fetch('/api/admin/concurrencia', {method:'POST'});
+    document.getElementById('btnConcurrencia').disabled = true;
+    document.getElementById('resultConcurrencia').innerHTML = '<p class="info">⏳ Preparando 50 conexiones...</p>';
+    const idPublicacion = document.getElementById('pubConcurrencia').value;
+    const url = idPublicacion
+        ? `/api/admin/concurrencia?id_publicacion=${encodeURIComponent(idPublicacion)}`
+        : '/api/admin/concurrencia';
+    const res = await fetch(url, {method:'POST'});
     const data = await res.json();
-    mostrarResultado('resultConcurrencia', data);
+    if (!data.success) {
+        mostrarResultado('resultConcurrencia', data);
+        document.getElementById('btnConcurrencia').disabled = false;
+        return;
+    }
+    monitorearConcurrencia();
+}
+
+async function monitorearConcurrencia() {
+    const res = await fetch('/api/admin/concurrencia/estado');
+    const data = await res.json();
+    const salida = (data.salida || []).map(escapeHtml).join('\n');
+    const etiqueta = {
+        inactivo: '⚪ Inactiva', ejecutando: '⏳ Ejecutando',
+        completado: '✅ Completada', error: '❌ Error'
+    }[data.estado] || data.estado;
+    document.getElementById('resultConcurrencia').innerHTML = `
+        <p class="${data.estado === 'error' ? 'error' : data.estado === 'completado' ? 'success' : 'info'}">
+            <strong>${etiqueta}</strong> · ${data.duracion_segundos}s
+        </p>
+        ${data.error ? `<p class="error">${escapeHtml(data.error)}</p>` : ''}
+        <pre style="max-height:360px;overflow:auto;white-space:pre-wrap;text-align:left">${salida || 'Esperando salida del proceso...'}</pre>`;
+    const pre = document.querySelector('#resultConcurrencia pre');
+    if (pre) pre.scrollTop = pre.scrollHeight;
+    if (data.estado === 'ejecutando') {
+        setTimeout(monitorearConcurrencia, 500);
+    } else {
+        document.getElementById('btnConcurrencia').disabled = false;
+    }
+}
+
+function escapeHtml(valor) {
+    return String(valor).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
 async function simularFallo() {
@@ -109,13 +195,78 @@ async function simularFallo() {
         monto: parseInt(document.getElementById('acidMonto').value) || 1,
         forzar_fallo: document.getElementById('acidForzarFallo').checked
     };
+    if (!body.id_usuario_origen || !body.id_usuario_destino || body.id_usuario_origen === body.id_usuario_destino) {
+        showToast('❌ Ingresa dos usuarios diferentes', false);
+        return;
+    }
+    const antes = await obtenerEstadosACID(body.id_usuario_origen, body.id_usuario_destino);
+    if (!antes) return;
     const res = await fetch('/api/publicaciones/simular-fallo', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify(body)
     });
     const data = await res.json();
-    mostrarResultado('resultACID', data);
+    const despues = await obtenerEstadosACID(body.id_usuario_origen, body.id_usuario_destino);
+    renderResultadoACID(data, antes, despues, body.forzar_fallo);
+    await cargarAuditoria();
+    document.getElementById('resultAuditoria').scrollIntoView({behavior: 'smooth', block: 'center'});
+}
+
+function actualizarExplicacionACID() {
+    const fallo = document.getElementById('acidForzarFallo').checked;
+    document.getElementById('explicacionACID').textContent = fallo
+        ? 'ROLLBACK: se simulará un error después del descuento. PostgreSQL deberá restaurar ambos saldos.'
+        : 'Operación normal: el origen perderá el monto y el destino lo recibirá.';
+}
+
+async function obtenerEstadosACID(origen, destino) {
+    const respuestas = await Promise.all([
+        fetch(`/api/usuarios/${origen}`), fetch(`/api/cuentas/${origen}/creditos`),
+        fetch(`/api/usuarios/${destino}`), fetch(`/api/cuentas/${destino}/creditos`)
+    ]);
+    if (respuestas.some(r => !r.ok)) {
+        showToast('❌ Verifica que ambos usuarios y sus cuentas existan', false);
+        return null;
+    }
+    const [uo, co, ud, cd] = await Promise.all(respuestas.map(r => r.json()));
+    return {
+        origen: {id: origen, nombre: `${uo.nombres} ${uo.apellidos}`, creditos: co.creditos},
+        destino: {id: destino, nombre: `${ud.nombres} ${ud.apellidos}`, creditos: cd.creditos}
+    };
+}
+
+async function consultarSaldosACID() {
+    const origen = parseInt(document.getElementById('acidOrigen').value);
+    const destino = parseInt(document.getElementById('acidDestino').value);
+    if (!origen || !destino || origen === destino) {
+        showToast('❌ Ingresa dos usuarios diferentes', false);
+        return;
+    }
+    const estado = await obtenerEstadosACID(origen, destino);
+    if (estado) renderResultadoACID({success: true, mensaje: 'Saldos consultados; aún no se ejecutó ninguna transferencia.'}, estado, estado, false);
+}
+
+function renderResultadoACID(resultado, antes, despues, falloForzado) {
+    const rollbackCorrecto = falloForzado &&
+        antes.origen.creditos === despues.origen.creditos &&
+        antes.destino.creditos === despues.destino.creditos;
+    document.getElementById('resultACID').innerHTML = `
+        <p class="${resultado.success ? 'success' : rollbackCorrecto ? 'success' : 'error'}">
+            ${resultado.success ? '✅' : rollbackCorrecto ? '✅ ROLLBACK comprobado:' : '❌'} ${escapeHtml(resultado.mensaje)}
+        </p>
+        <table class="data-table"><thead><tr><th>Cuenta</th><th>Usuario</th><th>Antes</th><th>Después</th><th>Cambio</th></tr></thead>
+        <tbody>
+            ${filaSaldoACID('Origen (envía)', antes.origen, despues.origen)}
+            ${filaSaldoACID('Destino (recibe)', antes.destino, despues.destino)}
+        </tbody></table>
+        ${rollbackCorrecto ? '<p class="success">Los dos saldos conservaron su valor: la transacción fue atómica.</p>' : ''}`;
+}
+
+function filaSaldoACID(etiqueta, antes, despues) {
+    const cambio = despues.creditos - antes.creditos;
+    return `<tr><td>${etiqueta}</td><td>#${antes.id} · ${escapeHtml(antes.nombre)}</td>
+        <td>${antes.creditos}</td><td>${despues.creditos}</td><td>${cambio > 0 ? '+' : ''}${cambio}</td></tr>`;
 }
 
 async function cargarAuditoria() {
@@ -137,23 +288,75 @@ async function cargarAuditoria() {
     </tbody></table>`;
 }
 
-async function consultaA() {
-    const res = await fetch('/api/usuarios/consulta/activos');
-    renderConsultaTabla(await res.json(), ['id_usuario','nombres','apellidos','cargo','total_pubs']);
-}
-async function consultaB() {
-    const res = await fetch('/api/publicaciones/consulta/top-fotografos');
-    renderConsultaTabla(await res.json(), ['id_usuario','nombres','apellidos','total_fotos','total_comentarios']);
-}
-async function consultaC() {
-    const res = await fetch('/api/publicaciones/consulta/fotos-interacciones');
-    renderConsultaTabla(await res.json(), ['id_foto','descripcion','nombre_usuario','likes','comentarios','total_interacciones']);
+async function eliminarPublicacionAdmin() {
+    const idPublicacion = parseInt(document.getElementById('adminEliminarPub').value);
+    if (!idPublicacion) {
+        showToast('❌ Ingresa el ID de la publicación', false);
+        return;
+    }
+    if (!confirm(`¿Eliminar lógicamente la publicación #${idPublicacion}?`)) return;
+    const div = document.getElementById('resultEliminarPub');
+    div.innerHTML = '<p class="info">⏳ Ejecutando eliminación lógica...</p>';
+    const res = await fetch(`/api/admin/publicaciones/${idPublicacion}`, {method: 'DELETE'});
+    const data = await res.json();
+    if (!res.ok) {
+        div.innerHTML = `<p class="error">❌ ${escapeHtml(data.detail || 'No se pudo eliminar')}</p>`;
+        return;
+    }
+    div.innerHTML = `<p class="success">✅ ${escapeHtml(data.mensaje)}</p>
+        <p class="success">El trigger registró el cambio. Se actualizó la sección Log de Auditoría.</p>`;
+    await cargarAuditoria();
+    document.getElementById('resultAuditoria').scrollIntoView({behavior: 'smooth', block: 'center'});
 }
 
-function renderConsultaTabla(data, cols) {
+const consultasOptimizacion = {
+    A: {url: '/api/usuarios/consulta/activos', cols: ['id_usuario','nombres','apellidos','cargo','total_pubs']},
+    B: {url: '/api/publicaciones/consulta/top-fotografos', cols: ['id_usuario','nombres','apellidos','total_fotos','total_comentarios']},
+    C: {url: '/api/publicaciones/consulta/fotos-interacciones', cols: ['id_pub','titulo','nombre_autor','nro_likes','nro_comentarios','total_interacciones']}
+};
+
+async function ejecutarConsulta(clave) {
+    const config = consultasOptimizacion[clave];
+    const inicio = performance.now();
+    const res = await fetch(config.url);
+    const data = await res.json();
+    const tiempo = performance.now() - inicio;
+    renderConsultaTabla(data, config.cols, clave, tiempo);
+    await verPlanConsulta(clave);
+}
+
+async function verPlanConsulta(clave) {
+    const div = document.getElementById('resultPlanConsulta');
+    div.innerHTML = `<p class="info">⏳ Ejecutando EXPLAIN ANALYZE para la consulta ${clave}...</p>`;
+    const res = await fetch(`/api/admin/optimizacion/${clave}`);
+    const p = await res.json();
+    if (!res.ok) {
+        div.innerHTML = `<p class="error">❌ ${escapeHtml(p.detail || 'No se pudo analizar')}</p>`;
+        return;
+    }
+    const indices = p.indices.length ? p.indices.map(escapeHtml).join(', ') : 'Ninguno';
+    div.innerHTML = `<h3>Plan técnico · Consulta ${clave}</h3>
+        <div class="metricas-opt">
+            <span><strong>Costo:</strong> ${p.costo_inicial}..${p.costo_final}</span>
+            <span><strong>Planificación:</strong> ${p.planning_time_ms.toFixed(3)} ms</span>
+            <span><strong>Ejecución BD:</strong> ${p.execution_time_ms.toFixed(3)} ms</span>
+            <span><strong>Filas:</strong> ${p.filas_reales} reales / ${p.filas_estimadas} estimadas</span>
+            <span><strong>Buffers:</strong> hit=${p.buffers_hit}, read=${p.buffers_read}</span>
+            <span><strong>Nodo principal:</strong> ${escapeHtml(p.nodo_principal)}</span>
+        </div>
+        <p><strong>Índices utilizados:</strong> <code>${indices}</code></p>
+        <p><strong>Nodos del plan:</strong> ${p.nodos.map(escapeHtml).join(' → ')}</p>`;
+}
+
+function renderConsultaTabla(data, cols, clave, tiempo) {
     const div = document.getElementById('resultConsultas');
-    if (!data.length) { div.innerHTML = '<p class="empty">Sin resultados</p>'; return; }
-    div.innerHTML = `<table class="data-table"><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
+    if (!data.length) {
+        div.innerHTML = `<p class="info">Consulta ${clave} completada en ${tiempo.toFixed(2)} ms · 0 resultados.</p>
+            <p class="empty">Ningún registro cumple las condiciones actuales.</p>`;
+        return;
+    }
+    div.innerHTML = `<p class="success">✅ Consulta ${clave} · ${data.length} resultados · ${tiempo.toFixed(2)} ms desde la API</p>
+    <table class="data-table"><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
     <tbody>${data.map(r=>`<tr>${cols.map(c=>`<td>${r[c]??'—'}</td>`).join('')}</tr>`).join('')}
     </tbody></table>`;
 }

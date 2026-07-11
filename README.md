@@ -137,6 +137,9 @@ investigación. Durante la población masiva solo cerca del 35% recibe una image
 
 - Usa los botones de filtro **Todos / Papers / Microblogs / Comentarios** para ver solo un tipo de publicación.
 - Las publicaciones se muestran ordenadas por fecha (más recientes primero), 10 por página.
+- El filtro de interacciones permite mostrar publicaciones con comentarios, con
+  likes o que tengan ambos tipos de interacción. Cada tarjeta indica sus totales de
+  likes y comentarios.
 
 #### Dar Like
 
@@ -149,6 +152,18 @@ investigación. Durante la población masiva solo cerca del 35% recibe una image
 #### Ver comentarios
 
 - Haz clic en 💬 en cualquier publicación para desplegar/ocultar sus comentarios.
+- También puedes introducir `publicaciones.id` en "Buscar por ID". El sistema
+  muestra únicamente esa publicación, la resalta y despliega automáticamente todos
+  sus comentarios; esto permite revisar fácilmente la publicación utilizada en la
+  prueba de concurrencia.
+
+#### Eliminar una publicación
+
+Desde el modal de acciones, el autor puede introducir su ID y seleccionar
+`Eliminar publicación`. La operación es un borrado lógico: cambia el estado de
+`activo` a `eliminado`, oculta la publicación del feed y conserva sus relaciones
+históricas. El trigger registra automáticamente el evento en `auditoria`. Un usuario
+distinto del autor no puede ejecutar la eliminación.
 
 ---
 
@@ -186,6 +201,14 @@ Genera datos de prueba masivos:
 - Se usa `SELECT FOR UPDATE` para bloquear la fila de la publicación durante cada transacción, evitando actualizaciones perdidas.
 - El nivel de aislamiento es `READ COMMITTED` por defecto (configurable a `SERIALIZABLE` en `scripts/concurrency_test.py`).
 - Resultados: transacciones exitosas, fallidas, tiempos promedio/máximo/mínimo.
+- El panel muestra el progreso en vivo de 0/50 a 50/50, el tiempo transcurrido,
+  la salida del proceso y el estado final. Mientras una prueba está activa, el
+  botón queda deshabilitado para impedir ejecuciones duplicadas.
+- La misma salida se replica en la terminal donde se ejecutó `python run.py`, por
+  lo que el progreso puede observarse simultáneamente en el frontend y en Uvicorn.
+- El campo "ID publicación" corresponde a `publicaciones.id` (clave primaria). Si
+  se deja vacío, el script selecciona automáticamente una publicación activa; si
+  se proporciona, valida y utiliza exactamente esa publicación.
 
 #### Demo ACID — Simulación de Fallo
 
@@ -197,16 +220,35 @@ Demuestra la propiedad de **Atomicidad**:
 
 > Esto demuestra que no es posible un estado inconsistente donde el crédito desaparezca a mitad de la operación.
 
+El panel identifica claramente al usuario origen (envía), al destino (recibe) y el
+monto. Permite consultar los saldos y presenta una tabla comparativa antes/después.
+Cuando se fuerza el fallo, confirma visualmente que ambos saldos permanecieron sin
+cambios y que PostgreSQL ejecutó el rollback.
+Al terminar cualquier demostración, el panel recarga automáticamente el Log de
+Auditoría. Una transferencia confirmada genera un evento; una operación revertida
+no genera ninguno, lo que también evidencia la atomicidad de la auditoría.
+
 #### Log de Auditoría
 
 - Muestra los últimos 20 eventos registrados por los triggers de auditoría.
 - Eventos capturados automáticamente:
-  - **Cambio de foto de perfil** — trigger `trg_auditoria_foto_perfil`
   - **Eliminación de publicación** — trigger `trg_auditoria_eliminacion`
+  - **Transferencia confirmada de créditos** — trigger `trg_auditoria_transferencia_creditos`
+  - **Registro de fotografía** — trigger `trg_auditoria_registro_fotografia`
+- El panel incluye “Eliminar Publicación y Auditar”: solicita únicamente el ID de
+  la publicación, obtiene internamente su autor, ejecuta el borrado lógico y recarga
+  automáticamente el log para mostrar el evento generado.
+- El log mantiene una altura máxima y utiliza desplazamiento vertical interno, con
+  el encabezado de la tabla fijo para facilitar la revisión de múltiples eventos.
 
 #### Consultas de Optimización
 
 Tres consultas complejas ejecutadas sobre la BD con sus índices aplicados:
+
+Cada consulta dispone de `Ejecutar y analizar`, que muestra conjuntamente los
+resultados, el tiempo de respuesta de la API y el plan técnico: costo inicial/final,
+tiempos de planificación y ejecución, buffers, filas, nodos e índices utilizados.
+El análisis no elimina ni crea índices desde el frontend.
 
 | Botón | Consulta | Índice principal usado |
 |-------|----------|----------------------|
@@ -215,6 +257,11 @@ Tres consultas complejas ejecutadas sobre la BD con sus índices aplicados:
 | **C: Fotos + interacciones** | Fotografías ordenadas por likes + comentarios | `idx_foto_likes` |
 
 > Para el informe de rendimiento: ejecuta estas mismas consultas con `EXPLAIN ANALYZE` en pgAdmin antes y después de crear los índices y captura los planes de ejecución.
+
+El reporte B también está disponible como script independiente en
+`database/05_top_fotografos.sql`. Este genera de forma idempotente los comentarios
+demostrativos necesarios para que diez autores con fotografías superen el umbral,
+crea `vw_top_fotografos`, ejecuta el top 10 y contiene una consulta diagnóstica.
 
 ---
 
@@ -267,4 +314,182 @@ python scripts/concurrency_test.py
 
 # Conectar a la BD directamente
 psql -U postgres -p 5434 -d academinet
+```
+
+---
+
+## Informe de rendimiento — resultados medidos
+
+Las consultas A, B y C se ejecutaron mediante:
+
+```sql
+EXPLAIN (ANALYZE, BUFFERS, VERBOSE, FORMAT TEXT)
+```
+
+Se realizaron mediciones antes y después de crear los índices estratégicos de
+`database/04_indexes.sql`. El costo es una estimación interna de PostgreSQL; el
+tiempo real se toma siempre de `Execution Time`.
+
+### Tabla comparativa completa
+
+| Consulta | Estado | Costo inicial | Costo final | Tiempo | Plan principal | Buffers |
+|---|---|---:|---:|---:|---|---|
+| A | Sin índices | 6088.64 | 6096.97 | 89.929 ms | Sort → HashAggregate → Hash Join → Seq Scan | hit=3534 |
+| A | Con índices | 6088.64 | 6096.97 | 67.774 ms | Sort → HashAggregate → Hash Join → Seq Scan | hit=3531 |
+| B | Sin índices | 1337.53 | 1337.56 | 1.071 ms | Limit → Sort → GroupAggregate → Nested Loop | hit=1022 |
+| B | Con índices | 1336.92 | 1336.94 | 1.065 ms | Limit → Sort → GroupAggregate → Nested Loop | hit=1022 |
+| C | Sin índices | 7374.35 | 7376.68 | 142.056 ms | Limit → Gather Merge → Parallel Seq Scan | hit=3825 |
+| C | Con índices | 7358.78 | 7361.11 | 44.976 ms | Limit → Gather Merge → Parallel Bitmap Heap Scan | hit=1842, read=31 |
+
+La mejora porcentual se calculó mediante:
+
+```text
+Mejora (%) = ((valor_sin_índice - valor_con_índice) / valor_sin_índice) × 100
+```
+
+### Resumen de resultados
+
+| Consulta | Tiempo sin índices | Tiempo con índices | Variación temporal | Reducción del costo final | Índice estratégico utilizado |
+|---|---:|---:|---:|---:|---|
+| A: usuarios activos | 89.929 ms | 67.774 ms | 24.64% | 0.00% | Ninguno |
+| B: top fotógrafos | 1.071 ms | 1.065 ms | 0.56% | 0.05% | Ninguno |
+| C: fotos con interacciones | 142.056 ms | 44.976 ms | 68.34% | 0.21% | `idx_pub_id_foto` |
+
+> La reducción temporal de A no se atribuye directamente a los índices porque el
+> costo y el plan fueron idénticos. La causa más probable es el calentamiento de
+> caché entre ejecuciones.
+
+### Análisis de la consulta A
+
+El plan antes y después de crear los índices fue:
+
+```text
+Sort
+└── HashAggregate
+    └── Hash Join
+        ├── Seq Scan publicaciones
+        └── Seq Scan usuarios
+```
+
+PostgreSQL leyó las 100,000 publicaciones porque todas cumplían la condición
+`estado = 'activo'`. El índice `idx_pub_autor_estado` no fue seleccionado debido a
+que la consulta necesitaba procesar prácticamente toda la tabla. En ese escenario,
+un recorrido secuencial resulta menos costoso que múltiples accesos mediante un
+índice.
+
+El costo permaneció exactamente igual:
+
+```text
+Sin índices: 6088.64..6096.97
+Con índices: 6088.64..6096.97
+```
+
+Conclusión para el informe:
+
+> En la consulta A, la creación de índices no modificó el costo estimado ni el plan
+> de ejecución. PostgreSQL mantuvo un `Sequential Scan` sobre las 100,000
+> publicaciones debido a que todas cumplían la condición `estado = 'activo'`. La
+> reducción temporal de 89.929 ms a 67.774 ms se atribuye principalmente al
+> calentamiento de caché y no al uso de un índice estratégico.
+
+### Análisis de la consulta B
+
+El plan general fue equivalente en ambas mediciones:
+
+```text
+Limit
+└── Sort
+    └── GroupAggregate
+        └── Nested Loop
+            ├── Seq Scan comentarios
+            ├── Index Scan publicaciones_pkey
+            └── Index Scan usuarios_pkey
+```
+
+La consulta produjo cero resultados porque ningún usuario superó el umbral de 50
+comentarios en el periodo evaluado. La tabla `comentarios` tenía 793 registros, de
+los cuales 372 correspondían al último mes. Por su reducido tamaño, PostgreSQL
+prefirió recorrerla secuencialmente.
+
+Los índices `publicaciones_pkey` y `usuarios_pkey` fueron utilizados, pero estos son
+índices automáticos asociados a claves primarias y no forman parte de los índices
+estratégicos de `04_indexes.sql`.
+
+Conclusión para el informe:
+
+> La consulta B presentó una reducción de costo de aproximadamente 0.05% y una
+> reducción temporal de 0.56%, por lo que no existe una mejora significativa.
+> PostgreSQL mantuvo un escaneo secuencial sobre `comentarios` debido a que la tabla
+> solo contenía 793 registros. Los únicos índices empleados fueron los asociados a
+> las claves primarias de `publicaciones` y `usuarios`.
+
+### Análisis de la consulta C
+
+Sin índices, PostgreSQL realizó un recorrido paralelo sobre las 100,000
+publicaciones:
+
+```text
+Gather Merge
+└── Sort
+    └── Hash Join
+        └── Parallel Seq Scan publicaciones
+```
+
+Después de crear los índices, el plan incluyó:
+
+```text
+Parallel Bitmap Heap Scan on publicaciones
+└── Bitmap Index Scan on idx_pub_id_foto
+```
+
+`idx_pub_id_foto` permitió localizar directamente las 35,000 publicaciones que
+tenían una fotografía, en lugar de recorrer las 100,000 publicaciones. El tiempo
+bajó de 142.056 ms a 44.976 ms, una mejora del 68.34%.
+
+Los buffers pasaron de 3,825 páginas a 1,873 páginas:
+
+```text
+Sin índices: 3825 hit
+Con índices: 1842 hit + 31 read = 1873 páginas
+Reducción aproximada: 51.03%
+```
+
+Conclusión para el informe:
+
+> La consulta C presentó la mejora más significativa. Sin índices, PostgreSQL
+> realizó un `Parallel Sequential Scan` sobre las 100,000 publicaciones. Después de
+> crear `idx_pub_id_foto`, el optimizador cambió a un `Bitmap Index Scan` seguido de
+> un `Parallel Bitmap Heap Scan`, localizando directamente las 35,000 publicaciones
+> con fotografía. El tiempo de ejecución se redujo de 142.056 ms a 44.976 ms,
+> equivalente a una mejora del 68.34%. La cantidad de páginas procesadas disminuyó
+> aproximadamente un 51.03%.
+
+### Evidencias gráficas pendientes
+
+Guardar las capturas con los siguientes nombres:
+
+```text
+A_sin_indices_plan.png
+A_sin_indices_tiempo.png
+A_con_indices_plan.png
+A_con_indices_tiempo.png
+B_sin_indices_plan.png
+B_sin_indices_tiempo.png
+B_con_indices_plan.png
+B_con_indices_tiempo.png
+C_sin_indices_plan.png
+C_sin_indices_tiempo.png
+C_con_indices_plan.png
+C_con_indices_tiempo.png
+```
+
+Las capturas deben mostrar el nombre de la base `academinet`, el nodo principal del
+plan, el tipo de escaneo, el índice utilizado cuando corresponda, `Planning Time`,
+`Execution Time` y los buffers. Para la consulta C con índices, la evidencia más
+importante es:
+
+```text
+Parallel Bitmap Heap Scan on publicaciones
+Bitmap Index Scan on idx_pub_id_foto
+Execution Time: 44.976 ms
 ```

@@ -110,6 +110,8 @@ class PublicacionOut(BaseModel):
     nro_citaciones: int
     contenido: Optional[str]
     estado: str
+    total_likes: int = 0
+    total_comentarios: int = 0
 
 
 # ── Comentarios ───────────────────────────────────────────────

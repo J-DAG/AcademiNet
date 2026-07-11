@@ -46,11 +46,27 @@
 
 <!-- Filtros -->
 <div class="card filter-bar">
+    <label>Buscar publicación:</label>
+    <input type="number" id="buscarPubId" min="1" placeholder="ID, ej. 90975"
+           class="search-input" style="width:170px" onkeydown="if(event.key==='Enter') buscarPublicacion()">
+    <button class="btn btn-secondary" onclick="buscarPublicacion()">Buscar por ID</button>
+    <button id="btnVolverFeed" class="btn btn-ghost hidden" onclick="volverAlFeed()">Volver al feed</button>
+</div>
+
+<div class="card filter-bar">
     <label>Filtrar por tipo:</label>
-    <button class="btn btn-chip active" onclick="setFiltro(null, this)">Todos</button>
-    <button class="btn btn-chip" onclick="setFiltro('paper', this)">Papers</button>
-    <button class="btn btn-chip" onclick="setFiltro('microblog', this)">Microblogs</button>
-    <button class="btn btn-chip" onclick="setFiltro('comentario', this)">Comentarios</button>
+    <button class="btn btn-chip tipo-chip active" onclick="setFiltro(null, this)">Todos</button>
+    <button class="btn btn-chip tipo-chip" onclick="setFiltro('paper', this)">Papers</button>
+    <button class="btn btn-chip tipo-chip" onclick="setFiltro('microblog', this)">Microblogs</button>
+    <button class="btn btn-chip tipo-chip" onclick="setFiltro('comentario', this)">Comentarios</button>
+</div>
+
+<div class="card filter-bar">
+    <label>Filtrar por interacciones:</label>
+    <button class="btn btn-chip interaccion-chip active" onclick="setFiltroInteraccion(null, this)">Todas</button>
+    <button class="btn btn-chip interaccion-chip" onclick="setFiltroInteraccion('comentarios', this)">Con comentarios</button>
+    <button class="btn btn-chip interaccion-chip" onclick="setFiltroInteraccion('likes', this)">Con likes</button>
+    <button class="btn btn-chip interaccion-chip" onclick="setFiltroInteraccion('ambos', this)">Con ambos</button>
 </div>
 
 <!-- Feed de publicaciones -->
@@ -58,7 +74,7 @@
     <div class="loading-row">Cargando publicaciones...</div>
 </div>
 
-<div class="pagination">
+<div id="paginacionPublicaciones" class="pagination">
     <button class="btn btn-ghost" onclick="cambiarPagina(-1)" id="btnPrev">← Anterior</button>
     <span id="paginaInfo">Página 1</span>
     <button class="btn btn-ghost" onclick="cambiarPagina(1)" id="btnNext">Siguiente →</button>
@@ -74,6 +90,7 @@
         </div>
         <div class="modal-actions">
             <button class="btn btn-primary" onclick="darLike()">👍 Like (+1 crédito)</button>
+            <button class="btn btn-danger" onclick="eliminarPublicacion()">🗑️ Eliminar publicación</button>
             <button class="btn btn-secondary" onclick="toggleModal(false)">Cerrar</button>
         </div>
     </div>
@@ -85,11 +102,13 @@
 let pagina = 0;
 const limit = 10;
 let filtroTipo = null;
+let filtroInteraccion = null;
 let pubSeleccionada = null;
 
 async function cargarPublicaciones() {
     const params = new URLSearchParams({ limit, offset: pagina * limit });
     if (filtroTipo) params.append('tipo', filtroTipo);
+    if (filtroInteraccion) params.append('interaccion', filtroInteraccion);
     const res = await fetch('/api/publicaciones/?' + params);
     const data = await res.json();
     renderFeed(data);
@@ -102,7 +121,7 @@ function renderFeed(data) {
     const feed = document.getElementById('feedPublicaciones');
     if (!data.length) { feed.innerHTML = '<div class="empty">Sin publicaciones</div>'; return; }
     feed.innerHTML = data.map(p => `
-        <div class="pub-card">
+        <div class="pub-card" id="publicacion-${p.id}">
             <div class="pub-header">
                 <span class="badge badge-tipo-${p.tipo}">${p.tipo.toUpperCase()}</span>
                 <span class="pub-date">${new Date(p.fecha_publicacion).toLocaleDateString('es-EC')}</span>
@@ -120,6 +139,8 @@ function renderFeed(data) {
             <div class="pub-footer">
                 <span>✍️ Autor: #${p.autor}</span>
                 <span>📖 Citaciones: ${p.nro_citaciones}</span>
+                <span>👍 Likes: ${p.total_likes || 0}</span>
+                <span>💬 Comentarios: ${p.total_comentarios || 0}</span>
                 ${p.id_foto ? `<span>📷 Foto #${p.id_foto}</span>` : ''}
                 <div class="pub-actions">
                     <button class="btn-icon" onclick="abrirModal(${p.id})">👍 Like</button>
@@ -131,9 +152,53 @@ function renderFeed(data) {
     `).join('');
 }
 
+async function buscarPublicacion() {
+    const id = parseInt(document.getElementById('buscarPubId').value);
+    if (!id) {
+        showToast('❌ Ingresa un ID de publicación válido', false);
+        return;
+    }
+    const feed = document.getElementById('feedPublicaciones');
+    feed.innerHTML = '<div class="loading-row">Buscando publicación...</div>';
+    const res = await fetch(`/api/publicaciones/${id}`);
+    if (!res.ok) {
+        const error = await res.json();
+        feed.innerHTML = `<div class="empty">${escHtml(error.detail || 'Publicación no encontrada')}</div>`;
+        document.getElementById('btnVolverFeed').classList.remove('hidden');
+        document.getElementById('paginacionPublicaciones').classList.add('hidden');
+        return;
+    }
+    const publicacion = await res.json();
+    renderFeed([publicacion]);
+    document.getElementById('btnVolverFeed').classList.remove('hidden');
+    document.getElementById('paginacionPublicaciones').classList.add('hidden');
+    const tarjeta = document.getElementById(`publicacion-${id}`);
+    if (tarjeta) {
+        tarjeta.style.outline = '3px solid var(--primary)';
+        tarjeta.scrollIntoView({behavior: 'smooth', block: 'center'});
+    }
+    await verComentarios(id);
+}
+
+function volverAlFeed() {
+    document.getElementById('buscarPubId').value = '';
+    document.getElementById('btnVolverFeed').classList.add('hidden');
+    document.getElementById('paginacionPublicaciones').classList.remove('hidden');
+    pagina = 0;
+    cargarPublicaciones();
+}
+
 function setFiltro(tipo, btn) {
     filtroTipo = tipo;
-    document.querySelectorAll('.btn-chip').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tipo-chip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    pagina = 0;
+    cargarPublicaciones();
+}
+
+function setFiltroInteraccion(interaccion, btn) {
+    filtroInteraccion = interaccion;
+    document.querySelectorAll('.interaccion-chip').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     pagina = 0;
     cargarPublicaciones();
@@ -191,6 +256,21 @@ async function darLike() {
     const data = await res.json();
     showToast(data.success ? '✅ ' + data.mensaje : '❌ ' + data.detail, data.success);
     toggleModal(false);
+}
+
+async function eliminarPublicacion() {
+    const userId = parseInt(document.getElementById('modalUserId').value);
+    if (!userId) { showToast('❌ Ingresa el ID del autor', false); return; }
+    if (!confirm(`¿Eliminar la publicación #${pubSeleccionada}? Se ocultará del feed, pero se conservará para auditoría.`)) return;
+    const res = await fetch(`/api/publicaciones/${pubSeleccionada}?id_usuario=${userId}`, {method: 'DELETE'});
+    const data = await res.json();
+    if (!res.ok) {
+        showToast('❌ ' + (data.detail || 'No se pudo eliminar'), false);
+        return;
+    }
+    showToast('✅ ' + data.mensaje, true);
+    toggleModal(false);
+    volverAlFeed();
 }
 
 async function verComentarios(id) {

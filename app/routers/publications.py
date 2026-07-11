@@ -12,7 +12,9 @@ _SELECT_PUB = """
     SELECT p.id, p.titulo, p.tipo, p.autor, p.id_foto,
            CASE WHEN f.id_foto IS NOT NULL THEN '/api/fotografias/' || f.id_foto || '/miniatura' END AS ruta_imagen,
            p.fecha_publicacion, p.nro_citaciones,
-           p.contenido, p.estado
+           p.contenido, p.estado,
+           (SELECT COUNT(*) FROM likes_publicaciones lp WHERE lp.id_publicacion = p.id) AS total_likes,
+           (SELECT COUNT(*) FROM comentarios c WHERE c.id_publicacion = p.id) AS total_comentarios
     FROM publicaciones p
     LEFT JOIN fotografias f ON f.id_foto = p.id_foto
 """
@@ -36,20 +38,24 @@ def listar_publicaciones(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     tipo: str | None = Query(None, pattern="^(paper|microblog|comentario)$"),
+    interaccion: str | None = Query(None, pattern="^(comentarios|likes|ambos)$"),
 ):
     with get_cursor() as cur:
+        condiciones = ["p.estado='activo'"]
+        parametros = []
         if tipo:
-            cur.execute(
-                _SELECT_PUB + " WHERE p.estado='activo' AND p.tipo=%s "
-                "ORDER BY p.fecha_publicacion DESC LIMIT %s OFFSET %s",
-                (tipo, limit, offset)
-            )
-        else:
-            cur.execute(
-                _SELECT_PUB + " WHERE p.estado='activo' "
-                "ORDER BY p.fecha_publicacion DESC LIMIT %s OFFSET %s",
-                (limit, offset)
-            )
+            condiciones.append("p.tipo=%s")
+            parametros.append(tipo)
+        if interaccion in ("comentarios", "ambos"):
+            condiciones.append("EXISTS (SELECT 1 FROM comentarios c WHERE c.id_publicacion=p.id)")
+        if interaccion in ("likes", "ambos"):
+            condiciones.append("EXISTS (SELECT 1 FROM likes_publicaciones lp WHERE lp.id_publicacion=p.id)")
+        parametros.extend([limit, offset])
+        cur.execute(
+            _SELECT_PUB + " WHERE " + " AND ".join(condiciones) +
+            " ORDER BY p.fecha_publicacion DESC LIMIT %s OFFSET %s",
+            parametros,
+        )
         return cur.fetchall()
 
 
