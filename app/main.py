@@ -3,8 +3,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.requests import Request
 from fastapi.responses import HTMLResponse
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import os
+import psycopg
 
 from app.routers import users, publications, photos, accounts, admin
 from app.database import close_pool, get_cursor
@@ -23,6 +25,18 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(psycopg.IntegrityError)
+async def manejar_integridad(_request: Request, exc: psycopg.IntegrityError):
+    mensaje = exc.diag.message_primary if exc.diag else "Los datos violan una restricción de integridad."
+    return JSONResponse(status_code=409, content={"detail": mensaje})
+
+
+@app.exception_handler(psycopg.errors.RaiseException)
+async def manejar_regla_negocio(_request: Request, exc: psycopg.errors.RaiseException):
+    mensaje = exc.diag.message_primary if exc.diag else "La operación fue rechazada por una regla de negocio."
+    return JSONResponse(status_code=400, content={"detail": mensaje})
 
 # Archivos estáticos
 static_dir = os.path.join(os.path.dirname(__file__), "..", "static")

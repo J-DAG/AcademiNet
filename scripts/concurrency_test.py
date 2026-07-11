@@ -16,6 +16,10 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+# Salida portable en terminales de Windows configuradas con CP1252.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 import psycopg
 from psycopg import IsolationLevel
 from dotenv import load_dotenv

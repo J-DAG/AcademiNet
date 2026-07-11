@@ -19,8 +19,8 @@ paginación sin necesitar una base activa. `GET /health` comprueba además Postg
 
 | Requisito | Versión usada |
 |-----------|--------------|
-| Python | 3.14 |
-| PostgreSQL | 17.5 |
+| Python | 3.12 a 3.14 |
+| PostgreSQL | 17 o 18 |
 | pip | incluido con Python |
 
 ---
@@ -28,17 +28,54 @@ paginación sin necesitar una base activa. `GET /health` comprueba además Postg
 ## Instalación y arranque
 
 ```bash
-# 1. Instalar dependencias
-pip install -r requirements.txt
+# 1. Crear y activar un entorno virtual
+python -m venv .venv
 
-# 2. Arrancar la aplicación
+# Windows PowerShell
+.\.venv\Scripts\Activate.ps1
+
+# Linux/macOS
+source .venv/bin/activate
+
+# 2. Instalar dependencias
+python -m pip install -r requirements.txt
+
+# 3. Crear la configuración local
+# Windows PowerShell
+Copy-Item .env.example .env
+
+# Linux/macOS
+cp .env.example .env
+
+# 4. Editar .env con el host, puerto, base, usuario y contraseña reales
+
+# Verificar Python, configuración, imágenes y conexión sin modificar datos
+python scripts/check_setup.py
+
+# 5. Arrancar la aplicación
 python run.py
 ```
 
 La app queda disponible en **`http://localhost:8000`**
 
-> **Nota:** El archivo `.env` ya está configurado con los datos de conexión.  
-> Si cambias el servidor, edítalo antes de arrancar.
+> **Nota:** `.env` es local y no se incluye en Git. PostgreSQL debe tener creada la
+> base indicada en `DB_NAME`; el botón **Inicializar BD** crea las tablas, funciones,
+> triggers, índices y vistas dentro de esa base.
+
+La carpeta `imagenes/` debe copiarse junto con el proyecto si se desean fotografías
+durante el poblado. Si no existe o está vacía, usuarios y publicaciones se generan
+normalmente, pero no habrá publicaciones asociadas a imágenes.
+
+Si la base aún no existe, créala desde pgAdmin o desde `psql` conectado a la base
+administrativa `postgres`:
+
+```sql
+CREATE DATABASE academinet;
+```
+
+El nombre debe coincidir con `DB_NAME` en `.env`. Después inicia la aplicación,
+abre el Panel de Administración y ejecuta primero **Inicializar BD** y luego
+**Poblar Datos**.
 
 ---
 
@@ -171,11 +208,12 @@ distinto del autor no puede ejecutar la eliminación.
 
 #### Inicializar Base de Datos
 
-- Ejecuta los 4 scripts SQL en orden:
+- Ejecuta los 5 scripts SQL en orden:
   1. `01_schema.sql` — crea las 12 tablas con todas sus restricciones.
   2. `02_procedures.sql` — crea 8 funciones PL/pgSQL.
   3. `03_triggers.sql` — crea 5 triggers.
-  4. `04_indexes.sql` — crea 16 índices estratégicos.
+  4. `04_indexes.sql` — crea 17 índices estratégicos.
+  5. `05_top_fotografos.sql` — prepara datos demostrativos idempotentes y crea la vista del top 10.
 - Solo es necesario la **primera vez**. Si ya existe el schema, los `CREATE TABLE IF NOT EXISTS` y `CREATE INDEX IF NOT EXISTS` lo omiten sin error.
 
 #### Poblar Base de Datos
@@ -193,6 +231,7 @@ Genera datos de prueba masivos:
 
 - **¿Se puede usar más de una vez?** Por defecto **no duplica** — si detecta que ya hay 10K usuarios y 100K publicaciones, se detiene e informa. Si quieres agregar un lote adicional, activa la casilla **Forzar repoblación**.
 - El proceso corre en **segundo plano**; la página no se congela. Puede tardar entre 2 y 10 minutos según el equipo.
+- El servidor bloquea un segundo intento mientras haya un poblado activo para evitar lotes duplicados.
 
 #### Prueba de Concurrencia
 
@@ -261,7 +300,7 @@ El análisis no elimina ni crea índices desde el frontend.
 El reporte B también está disponible como script independiente en
 `database/05_top_fotografos.sql`. Este genera de forma idempotente los comentarios
 demostrativos necesarios para que diez autores con fotografías superen el umbral,
-crea `vw_top_fotografos`, ejecuta el top 10 y contiene una consulta diagnóstica.
+crea `vw_top_fotografos` y ejecuta el reporte final del top 10.
 
 ---
 
@@ -313,7 +352,7 @@ $env:SEED_FORZAR="1"; python scripts/seed_data.py  # Windows PowerShell
 python scripts/concurrency_test.py
 
 # Conectar a la BD directamente
-psql -U postgres -p 5434 -d academinet
+psql -U <DB_USER> -p <DB_PORT> -d <DB_NAME>
 ```
 
 ---

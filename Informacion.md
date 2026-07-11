@@ -80,12 +80,12 @@ Diseñar tres consultas complejas:
 | Base de datos | PostgreSQL |
 | Backend / API | Python 3.x + FastAPI |
 | Frontend | Jinja2 templates + HTML/CSS/JS vanilla |
-| Conector BD | psycopg2 (ThreadedConnectionPool) |
+| Conector BD | psycopg 3 (`ConnectionPool`) |
 | Servidor | Uvicorn |
 
 **Arranque:** `python run.py` → `http://localhost:8000`  
 **Docs API:** `http://localhost:8000/docs`  
-**Config:** `.env` (ya configurado) — PostgreSQL 17 en `localhost:5434`, BD `academinet`
+**Config:** `.env` creado localmente desde `.env.example`; puerto y credenciales configurables.
 
 ---
 
@@ -97,7 +97,8 @@ Proyecto_BD2/
 │   ├── 01_schema.sql          ← Tablas + constraints
 │   ├── 02_procedures.sql      ← Funciones PL/pgSQL
 │   ├── 03_triggers.sql        ← Triggers auditoría y negocio
-│   └── 04_indexes.sql         ← Índices + consultas EXPLAIN ANALYZE
+│   ├── 04_indexes.sql         ← Índices + consultas EXPLAIN ANALYZE
+│   └── 05_top_fotografos.sql  ← Datos demostrativos + vista del top 10
 ├── app/
 │   ├── main.py                ← Entry point FastAPI
 │   ├── database.py            ← Pool de conexiones
@@ -141,7 +142,8 @@ Proyecto_BD2/
   - `trg_antispam_publicaciones` → `BEFORE INSERT`; lanza excepción si el usuario publicó ≥5 veces en el último minuto.
   - `trg_actualizar_seguidores` → `AFTER INSERT/DELETE` en `seguidores`; actualiza `numero_seguidores`.
   - `trg_actualizar_likes_foto` → `AFTER INSERT/DELETE` en `likes_fotografias`; actualiza `nro_likes`.
-- `04_indexes.sql` — 14 índices B-Tree y compuestos sobre `publicaciones`, `comentarios`, `fotografias`, `likes_*`, `usuarios`, `transferencias_creditos`. Consultas A/B/C con `EXPLAIN ANALYZE` comentadas para comparar antes/después.
+- `04_indexes.sql` — 17 índices B-Tree, parciales y compuestos sobre `publicaciones`, `comentarios`, `fotografias`, `likes_*`, `usuarios` y `transferencias_creditos`.
+- `05_top_fotografos.sql` — completa idempotentemente los comentarios demostrativos y crea `vw_top_fotografos`.
 
 #### Backend (`app/`)
 - `database.py` — `ThreadedConnectionPool` (2–20 conexiones), context managers `get_conn()` y `get_cursor()` con commit/rollback automático.

@@ -119,6 +119,16 @@ def batch_insert(cur, sql: str, data: list):
     cur.executemany(sql, data)
 
 
+def preparar_top_fotografos(conn):
+    """Ejecuta el reporte idempotente después de que existan datos poblados."""
+    ruta = Path(__file__).resolve().parents[1] / "database" / "05_top_fotografos.sql"
+    print("Preparando datos del Top 10 fotógrafos...", flush=True)
+    with conn.cursor() as cur:
+        cur.execute(ruta.read_text(encoding="utf-8"))
+    conn.commit()
+    print("  ✅ Top 10 fotógrafos preparado", flush=True)
+
+
 def seed_fotos(conn, ids_usuarios: list):
     """Paso independiente: poblar fotografias y asignarlas a publicaciones."""
     carpeta = Path(__file__).resolve().parents[1] / "imagenes"
@@ -195,10 +205,12 @@ def seed(forzar: bool = False):
                 cur.execute("SELECT id_usuario FROM usuarios ORDER BY id_usuario")
                 ids_usuarios = [r[0] for r in cur.fetchall()]
             seed_fotos(conn, ids_usuarios)
+            preparar_top_fotografos(conn)
             conn.close()
             return
         print(f"⚠️  La BD ya tiene {n_usuarios} usuarios, {n_pubs} publicaciones y {n_fotos} fotos.")
         print("   Usa forzar=True (o el botón 'Forzar repoblación') para agregar más.")
+        preparar_top_fotografos(conn)
         conn.close()
         return
 
@@ -368,6 +380,9 @@ def seed(forzar: bool = False):
             )
         conn.commit()
     print(f"  ✅ {len(com_batch)} comentarios generados")
+
+    # ── 10. Preparar reporte demostrativo Top Fotógrafos ─────
+    preparar_top_fotografos(conn)
 
     conn.close()
     print("\n🎉 Población masiva completada exitosamente.")

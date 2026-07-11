@@ -89,24 +89,3 @@ SELECT
 FROM vw_top_fotografos
 ORDER BY total_fotos DESC, comentarios_ultimo_mes DESC
 LIMIT 10;
-
--- Diagnóstico: muestra los usuarios con más comentarios aunque todavía
--- no alcancen el umbral. Es útil cuando el reporte final devuelve cero filas.
-SELECT
-    u.id_usuario,
-    u.nombres,
-    u.apellidos,
-    COUNT(DISTINCT p.id_foto)       AS total_fotos,
-    COUNT(DISTINCT c.id_comentario) AS comentarios_ultimo_mes,
-    GREATEST(51 - COUNT(DISTINCT c.id_comentario), 0) AS comentarios_para_clasificar
-FROM usuarios u
-JOIN publicaciones p
-    ON p.autor = u.id_usuario
-   AND p.estado = 'activo'
-   AND p.id_foto IS NOT NULL
-LEFT JOIN comentarios c
-    ON c.id_publicacion = p.id
-   AND c.fecha_comentario >= NOW() - INTERVAL '1 month'
-GROUP BY u.id_usuario, u.nombres, u.apellidos
-ORDER BY comentarios_ultimo_mes DESC, total_fotos DESC
-LIMIT 10;

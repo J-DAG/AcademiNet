@@ -12,6 +12,8 @@ _concurrencia_estado = {
     "estado": "inactivo", "inicio": None, "fin": None,
     "salida": [], "error": None,
 }
+_poblacion_lock = threading.Lock()
+_poblacion_en_curso = False
 
 _CONSULTAS_EXPLAIN = {
     "A": """
@@ -82,15 +84,31 @@ def poblar_base(background_tasks: BackgroundTasks, forzar: bool = False):
     forzar=false (default): omite si la BD ya tiene 10K usuarios y 100K publicaciones.
     forzar=true: agrega otro lote aunque ya haya datos.
     """
+    global _poblacion_en_curso
+    with _poblacion_lock:
+        if _poblacion_en_curso:
+            return Respuesta(success=False, mensaje="Ya existe una población masiva en ejecución.")
+        _poblacion_en_curso = True
+
     # El botón es autosuficiente: garantiza primero que esquema, funciones,
     # triggers e índices estén instalados.
-    init_db()
+    try:
+        init_db()
+    except Exception:
+        with _poblacion_lock:
+            _poblacion_en_curso = False
+        raise
 
     def _run(forzar_flag: bool):
+        global _poblacion_en_curso
         script = os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "seed_data.py")
         env = os.environ.copy()
         env["SEED_FORZAR"] = "1" if forzar_flag else "0"
-        subprocess.run([sys.executable, script], check=True, env=env)
+        try:
+            subprocess.run([sys.executable, script], check=True, env=env)
+        finally:
+            with _poblacion_lock:
+                _poblacion_en_curso = False
 
     background_tasks.add_task(_run, forzar)
     accion = "forzada" if forzar else "protegida (se omite si ya hay datos suficientes)"
