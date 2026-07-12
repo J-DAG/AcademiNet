@@ -318,7 +318,110 @@ indexación.
 | `idx_tc_origen` | Historial de créditos enviados. |
 | `idx_tc_destino` | Historial de créditos recibidos. |
 
-## 8. Capturas requeridas
+## 8. Justificación del protocolo de control de concurrencia
+
+### 8.1 Protocolo seleccionado
+
+AcademiNet utiliza un protocolo híbrido compuesto por el nivel de aislamiento
+`READ COMMITTED` de PostgreSQL y bloqueos pesimistas de fila mediante
+`SELECT ... FOR UPDATE`. Cada operación se ejecuta en una transacción independiente
+y finaliza con `COMMIT` cuando tiene éxito o con `ROLLBACK` cuando ocurre un error.
+
+`READ COMMITTED` aplica el mecanismo MVCC (*Multi-Version Concurrency Control*) de
+PostgreSQL: cada sentencia solamente puede observar datos confirmados antes de que
+comience esa sentencia. Por tanto, evita las lecturas sucias sin bloquear las
+consultas ordinarias de lectura.
+
+El bloqueo `FOR UPDATE` se agrega en los puntos donde una operación debe leer un
+estado y modificarlo de forma consistente. Si otra transacción intenta bloquear la
+misma fila, debe esperar hasta que la primera confirme o revierta sus cambios.
+
+### 8.2 Aplicación en AcademiNet
+
+En la prueba de concurrencia, 50 hilos abren conexiones independientes e intentan
+insertar un comentario sobre la misma publicación. Antes de insertar, cada
+transacción ejecuta:
+
+```sql
+SELECT id
+FROM publicaciones
+WHERE id = :id_publicacion AND estado = 'activo'
+FOR UPDATE;
+```
+
+Este bloqueo serializa el acceso crítico a la publicación. Así, una transacción no
+puede validar la publicación mientras otra la está modificando o eliminando
+lógicamente. El bloqueo se libera automáticamente al ejecutar `COMMIT` o
+`ROLLBACK`; no depende de una liberación manual desde Python.
+
+El mismo criterio se aplica a las transferencias de créditos producidas por likes,
+citaciones y por el demo ACID. Las cuentas involucradas se bloquean antes de leer
+el saldo y actualizarlo:
+
+```sql
+SELECT 1
+FROM cuentas
+WHERE id_usuario IN (:origen, :destino)
+ORDER BY id_usuario
+FOR UPDATE;
+```
+
+El orden ascendente por `id_usuario` hace que las transacciones soliciten los
+bloqueos en un orden determinista, lo que reduce el riesgo de interbloqueos cuando
+dos operaciones afectan las mismas cuentas en sentido contrario.
+
+### 8.3 Problemas que evita
+
+El protocolo elegido proporciona las siguientes garantías:
+
+- Evita lecturas sucias porque `READ COMMITTED` solo expone datos confirmados.
+- Evita actualizaciones perdidas sobre los saldos, porque una segunda transacción
+  debe esperar antes de volver a leer y modificar una cuenta bloqueada.
+- Impide validar una publicación activa mientras otra transacción mantiene
+  bloqueada esa misma fila para modificarla.
+- Conserva la atomicidad: el comentario o la transferencia se confirma por
+  completo; ante una excepción, sus modificaciones se revierten.
+- Reduce la posibilidad de *deadlock* al bloquear las cuentas siempre en el mismo
+  orden.
+
+El `threading.Lock` presente en el script se utiliza únicamente para proteger los
+contadores y la salida compartida de Python. La integridad de los datos la garantiza
+PostgreSQL mediante sus transacciones y bloqueos de fila.
+
+### 8.4 Razón para usar READ COMMITTED
+
+Se seleccionó `READ COMMITTED` porque ofrece un equilibrio adecuado entre
+consistencia y rendimiento para una red social: permite que operaciones sobre
+publicaciones diferentes avancen simultáneamente y concentra la espera solamente
+en las filas que realmente compiten. Utilizar `SERIALIZABLE` para todas las
+operaciones aumentaría la protección frente a anomalías complejas, pero también
+podría generar más abortos, reintentos y costo operativo bajo una carga elevada.
+
+Los bloqueos pesimistas sí reducen temporalmente la concurrencia cuando los 50
+hilos trabajan sobre la misma publicación. Esta serialización es intencional en la
+prueba, pues representa el peor caso de contención y prioriza la consistencia. En
+el uso normal, las operaciones se distribuyen entre múltiples publicaciones y el
+bloqueo de una fila no detiene las transacciones sobre otras filas.
+
+### 8.5 Validación experimental
+
+La prueba se ejecuta con `scripts/concurrency_test.py` o desde el módulo
+Administración. Para documentarla se debe registrar:
+
+- Nivel de aislamiento mostrado: `READ_COMMITTED`.
+- Número de conexiones o hilos: 50.
+- Identificador de la publicación objetivo.
+- Transacciones exitosas y fallidas.
+- Tiempo total, promedio, mínimo y máximo.
+- Cantidad de comentarios antes y después de la ejecución.
+
+Si las 50 transacciones finalizan correctamente, el contador de comentarios debe
+aumentar exactamente en 50. Un resultado diferente debe justificarse con los
+errores reportados por el script. Como prueba adicional, el nivel puede cambiarse
+a `SERIALIZABLE`; en ese escenario la aplicación debería contemplar reintentos para
+las transacciones que PostgreSQL cancele por conflictos de serialización.
+
+## 9. Capturas requeridas
 
 Las capturas constituyen la evidencia visual de la ejecución de las pruebas. Se
 recomienda guardarlas en una carpeta `capturas_rendimiento/`, con los siguientes
@@ -332,9 +435,10 @@ nombres consistentes:
 05_B_con_indices.png
 06_C_sin_indices.png
 07_C_con_indices.png
+08_prueba_concurrencia.png
 ```
 
-### 8.1 Tabla de control de evidencias
+### 9.1 Tabla de control de evidencias
 
 | N.º | Captura | Evidencia que debe mostrar | Estado |
 |---:|---|---|:---:|
@@ -345,11 +449,12 @@ nombres consistentes:
 | 5 | `05_B_con_indices.png` | Plan y tiempo de la consulta B con los índices creados. | Pendiente |
 | 6 | `06_C_sin_indices.png` | Plan y tiempo de la consulta C antes de crear los índices. | Pendiente |
 | 7 | `07_C_con_indices.png` | Uso de `idx_pub_id_foto` y métricas finales de la consulta C. | Pendiente |
+| 8 | `08_prueba_concurrencia.png` | Resultado de los 50 hilos, nivel de aislamiento y tiempos. | Pendiente |
 
 Cambiar **Pendiente** por **Incluida** a medida que se incorporen las imágenes al
 documento final.
 
-### 8.2 Espacios para insertar las capturas
+### 9.2 Espacios para insertar las capturas
 
 #### Figura 1. Volumetría de la base de datos
 
@@ -400,7 +505,15 @@ estratégicos, usado como línea base para la comparación.
 **Pie de figura:** Figura 7. Plan optimizado de la consulta C con el índice
 `idx_pub_id_foto`, junto con la reducción del tiempo de ejecución y de los buffers.
 
-### 8.3 Requisitos de cada captura
+#### Figura 8. Prueba de control de concurrencia
+
+> **Insertar aquí:** `capturas_rendimiento/08_prueba_concurrencia.png`
+
+**Pie de figura:** Figura 8. Ejecución concurrente de 50 transacciones sobre una
+misma publicación utilizando `READ COMMITTED` y bloqueo de fila con
+`SELECT FOR UPDATE`.
+
+### 9.3 Requisitos de cada captura
 
 Cada captura debe mostrar:
 
@@ -424,7 +537,7 @@ La captura principal es C con índices, donde debe aparecer:
 Bitmap Index Scan on idx_pub_id_foto
 ```
 
-## 9. Conclusiones
+## 10. Conclusiones
 
 Los índices no mejoran automáticamente todas las consultas. Su utilidad depende de
 la selectividad, el tamaño de las tablas y la proporción de filas leídas.
