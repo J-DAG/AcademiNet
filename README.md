@@ -214,7 +214,7 @@ distinto del autor no puede ejecutar la eliminación.
   1. `01_schema.sql` — crea las 12 tablas con todas sus restricciones.
   2. `02_procedures.sql` — crea 8 funciones PL/pgSQL.
   3. `03_triggers.sql` — crea 5 triggers.
-  4. `04_indexes.sql` — crea 17 índices estratégicos.
+  4. `04_indexes.sql` — crea 15 índices estratégicos.
   5. `05_top_fotografos.sql` — prepara datos demostrativos idempotentes y crea la vista del top 10.
 - Solo es necesario la **primera vez**. Si ya existe el schema, los `CREATE TABLE IF NOT EXISTS` y `CREATE INDEX IF NOT EXISTS` lo omiten sin error.
 
@@ -304,6 +304,12 @@ El reporte B también está disponible como script independiente en
 demostrativos necesarios para que diez autores con fotografías superen el umbral,
 crea `vw_top_fotografos` y ejecuta el reporte final del top 10.
 
+`database/04_indexes.sql` incluye al inicio un bloque `DROP INDEX` completamente
+comentado para obtener planes "sin índices". Solo elimina los 15 índices
+estratégicos, nunca los asociados a claves primarias o restricciones `UNIQUE`.
+Después de medir, los índices se restauran ejecutando nuevamente los `CREATE INDEX`
+activos del mismo archivo.
+
 ---
 
 ## API REST — Documentación interactiva
@@ -321,8 +327,7 @@ usuarios ──┬── cuentas
            ├── publicaciones ──┬── comentarios
            │                   ├── likes_publicaciones
            │                   └── citaciones
-           ├── fotografias ────┬── comentarios_foto
-           │                   └── likes_fotografias
+           ├── fotografias (objeto opcional de una publicación)
            └── seguidores (relación muchos a muchos)
 
 transferencias_creditos  ← registro de movimientos ACID
@@ -359,7 +364,12 @@ psql -U <DB_USER> -p <DB_PORT> -d <DB_NAME>
 
 ---
 
-## Informe de rendimiento — resultados medidos
+## Informe de rendimiento — medición histórica
+
+> Esta sección conserva la primera medición realizada durante el desarrollo. El
+> informe vigente, medido sobre el modelo y dataset finales, está en
+> [`Informe_Rendimiento.md`](Informe_Rendimiento.md). Para repetirlo ejecuta
+> `python scripts/benchmark_indexes.py`.
 
 Las consultas A, B y C se ejecutaron mediante:
 

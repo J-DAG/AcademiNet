@@ -312,7 +312,7 @@ async function eliminarPublicacionAdmin() {
 const consultasOptimizacion = {
     A: {url: '/api/usuarios/consulta/activos', cols: ['id_usuario','nombres','apellidos','cargo','total_pubs']},
     B: {url: '/api/publicaciones/consulta/top-fotografos', cols: ['id_usuario','nombres','apellidos','total_fotos','total_comentarios']},
-    C: {url: '/api/publicaciones/consulta/fotos-interacciones', cols: ['id_pub','titulo','nombre_autor','nro_likes','nro_comentarios','total_interacciones']}
+    C: {url: '/api/publicaciones/consulta/fotos-interacciones', cols: ['id_pub','titulo','nombre_autor','total_likes','total_comentarios','total_interacciones']}
 };
 
 async function ejecutarConsulta(clave) {

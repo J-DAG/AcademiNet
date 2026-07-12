@@ -14,7 +14,6 @@ def test_openapi_expone_modulos_obligatorios():
     assert "/api/usuarios/" in paths
     assert "/api/publicaciones/likes" in paths
     assert "/api/publicaciones/citaciones" in paths
-    assert "/api/fotografias/{id_foto}/likes" in paths
     assert "/api/fotografias/{id_foto}/archivo" in paths
     assert "/api/fotografias/{id_foto}/miniatura" in paths
     assert "/api/admin/concurrencia" in paths

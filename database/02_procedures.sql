@@ -255,7 +255,7 @@ BEGIN
     UPDATE cuentas SET creditos = creditos + p_monto WHERE id_usuario = p_id_usuario_destino;
 
     INSERT INTO transferencias_creditos (id_usuario_origen, id_usuario_destino, monto, tipo_accion)
-    VALUES (p_id_usuario_origen, p_id_usuario_destino, p_monto, 'like');
+    VALUES (p_id_usuario_origen, p_id_usuario_destino, p_monto, 'demo');
 
     RETURN jsonb_build_object('success', true, 'mensaje', 'Transferencia completada.');
 
@@ -321,6 +321,7 @@ $$;
 -- (likes + comentarios). Reemplaza la anterior "fotos con más likes"
 -- ya que likes y comentarios ahora pertenecen a la publicación.
 -- ============================================================
+DROP FUNCTION IF EXISTS consulta_fotos_mas_interacciones();
 CREATE OR REPLACE FUNCTION consulta_fotos_mas_interacciones()
 RETURNS TABLE (
     id_pub              INT,
@@ -328,27 +329,35 @@ RETURNS TABLE (
     nombre_autor        TEXT,
     ruta_imagen         VARCHAR,
     descripcion_foto    TEXT,
-    nro_likes           BIGINT,
-    nro_comentarios     BIGINT,
+    total_likes         BIGINT,
+    total_comentarios   BIGINT,
     total_interacciones BIGINT
 )
 LANGUAGE sql AS $$
+    WITH likes AS (
+        SELECT id_publicacion, COUNT(*) AS total_likes
+        FROM likes_publicaciones
+        GROUP BY id_publicacion
+    ), comentarios_agrupados AS (
+        SELECT id_publicacion, COUNT(*) AS total_comentarios
+        FROM comentarios
+        GROUP BY id_publicacion
+    )
     SELECT
         p.id                                            AS id_pub,
         p.titulo,
         (u.nombres || ' ' || u.apellidos)::TEXT         AS nombre_autor,
         ('/api/fotografias/' || f.id_foto || '/archivo')::VARCHAR AS ruta_imagen,
         f.descripcion                                   AS descripcion_foto,
-        COUNT(DISTINCT lp.id_like)                      AS nro_likes,
-        COUNT(DISTINCT c.id_comentario)                 AS nro_comentarios,
-        COUNT(DISTINCT lp.id_like) + COUNT(DISTINCT c.id_comentario) AS total_interacciones
+        COALESCE(l.total_likes, 0)                      AS total_likes,
+        COALESCE(c.total_comentarios, 0)                AS total_comentarios,
+        COALESCE(l.total_likes, 0) + COALESCE(c.total_comentarios, 0) AS total_interacciones
     FROM publicaciones p
     JOIN fotografias f         ON f.id_foto = p.id_foto
     JOIN usuarios u            ON u.id_usuario = p.autor
-    LEFT JOIN likes_publicaciones lp ON lp.id_publicacion = p.id
-    LEFT JOIN comentarios c          ON c.id_publicacion  = p.id
+    LEFT JOIN likes l ON l.id_publicacion = p.id
+    LEFT JOIN comentarios_agrupados c ON c.id_publicacion = p.id
     WHERE p.estado = 'activo'
-    GROUP BY p.id, p.titulo, nombre_autor, f.id_foto, f.descripcion
     ORDER BY total_interacciones DESC
     LIMIT 20;
 $$;

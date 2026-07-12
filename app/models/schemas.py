@@ -72,15 +72,6 @@ class FotografiaOut(BaseModel):
     url_miniatura: str
     descripcion: Optional[str]
     fecha_subida: Optional[datetime]
-    nro_likes: int = 0
-
-
-class InteraccionFoto(BaseModel):
-    id_usuario: int = Field(gt=0)
-
-
-class ComentarioFotoCreate(InteraccionFoto):
-    contenido: str = Field(min_length=1, max_length=2000)
 
 
 # ── Publicaciones ─────────────────────────────────────────────

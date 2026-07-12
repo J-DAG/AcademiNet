@@ -5,7 +5,7 @@ from fastapi.responses import Response
 
 from app.database import get_cursor
 from app.image_processing import optimizar_imagen
-from app.models.schemas import ComentarioFotoCreate, FotografiaOut, InteraccionFoto, Respuesta
+from app.models.schemas import FotografiaOut
 
 router = APIRouter(prefix="/fotografias", tags=["Fotografías"])
 
@@ -14,7 +14,7 @@ MAX_IMAGEN_BYTES = 25 * 1024 * 1024
 
 _SELECT_META = """
     SELECT id_foto, id_usuario, nombre_archivo, tipo_mime, tamano_bytes,
-           descripcion, fecha_subida, nro_likes,
+           descripcion, fecha_subida,
            '/api/fotografias/' || id_foto || '/archivo' AS url_imagen,
            '/api/fotografias/' || id_foto || '/miniatura' AS url_miniatura
     FROM fotografias
@@ -105,19 +105,3 @@ def fotos_por_usuario(id_usuario: int):
     with get_cursor() as cur:
         cur.execute(_SELECT_META + " WHERE id_usuario = %s AND objeto IS NOT NULL ORDER BY fecha_subida DESC", (id_usuario,))
         return cur.fetchall()
-
-
-@router.post("/{id_foto}/likes", response_model=Respuesta)
-def dar_like_fotografia(id_foto: int, data: InteraccionFoto):
-    with get_cursor() as cur:
-        cur.execute("INSERT INTO likes_fotografias (id_foto, id_usuario) VALUES (%s, %s) ON CONFLICT DO NOTHING RETURNING id_like_foto", (id_foto, data.id_usuario))
-        if not cur.fetchone():
-            raise HTTPException(status_code=409, detail="El usuario ya dio like a esta fotografía")
-    return Respuesta(success=True, mensaje="Like registrado en la fotografía")
-
-
-@router.post("/{id_foto}/comentarios", status_code=201)
-def comentar_fotografia(id_foto: int, data: ComentarioFotoCreate):
-    with get_cursor() as cur:
-        cur.execute("INSERT INTO comentarios_foto (id_foto, id_usuario, contenido) VALUES (%s, %s, %s) RETURNING *", (id_foto, data.id_usuario, data.contenido))
-        return cur.fetchone()

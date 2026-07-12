@@ -35,15 +35,21 @@ _CONSULTAS_EXPLAIN = {
         ORDER BY total_fotos DESC LIMIT 10
     """,
     "C": """
+        WITH likes AS (
+            SELECT id_publicacion, COUNT(*) AS total_likes
+            FROM likes_publicaciones GROUP BY id_publicacion
+        ), comentarios_agrupados AS (
+            SELECT id_publicacion, COUNT(*) AS total_comentarios
+            FROM comentarios GROUP BY id_publicacion
+        )
         SELECT p.id, p.titulo, (u.nombres||' '||u.apellidos) AS autor, f.id_foto,
-               COUNT(DISTINCT lp.id_like)+COUNT(DISTINCT c.id_comentario) AS total_interacciones
+               COALESCE(l.total_likes,0)+COALESCE(c.total_comentarios,0) AS total_interacciones
         FROM publicaciones p
         JOIN fotografias f ON f.id_foto=p.id_foto
         JOIN usuarios u ON u.id_usuario=p.autor
-        LEFT JOIN likes_publicaciones lp ON lp.id_publicacion=p.id
-        LEFT JOIN comentarios c ON c.id_publicacion=p.id
+        LEFT JOIN likes l ON l.id_publicacion=p.id
+        LEFT JOIN comentarios_agrupados c ON c.id_publicacion=p.id
         WHERE p.estado='activo'
-        GROUP BY p.id, p.titulo, u.nombres, u.apellidos, f.id_foto
         ORDER BY total_interacciones DESC LIMIT 20
     """,
 }

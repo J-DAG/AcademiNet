@@ -26,8 +26,8 @@ El sistema permitirá:
   * **Usuarios:** `id_usuario`, `cedula` (**Debe ser ÚNICA para evitar duplicados e identificaciones falsas**), `apellidos`, `nombres`, `cargo` (restringido mediante un `CHECK` a solo 'profesor' o 'investigador').
   * **Cuentas:** `id_usuario`, `tipo` (regular, premium), `fecha_creacion`, `numero_seguidores` (debe ser `DEFAULT 0` y `CHECK >= 0`), `privacidad`, `estado` (activo, inactivo).
   * **Publicaciones:** `id`, `titulo`, `tipo`, `autor` (`id_usuario`), `fecha_publicacion` (no puede ser mayor a la fecha actual), `nro_citaciones` (`CHECK >= 0`).
-  * **Fotografías:** `objeto` [imagen/BYTEA], `descripcion`, `nro_likes` (`CHECK >= 0`).
-* **Relaciones adicionales:** Diseñar tablas intermedias para gestionar interacciones como comentarios sobre publicaciones o fotografías, garantizando la integridad referencial (`FOREIGN KEY`) con borrado o actualización en cascada según corresponda.
+  * **Fotografías:** `objeto` [imagen/BYTEA], `descripcion` y metadatos del archivo. Las interacciones pertenecen a la publicación que adjunta la fotografía.
+* **Relaciones adicionales:** Las tablas `comentarios` y `likes_publicaciones` gestionan las interacciones mediante claves foráneas con borrado y actualización en cascada.
 
 ---
 
@@ -125,7 +125,7 @@ Proyecto_BD2/
 **Archivos creados:**
 
 #### Base de Datos (`database/`)
-- `01_schema.sql` — 12 tablas: `usuarios`, `cuentas`, `publicaciones`, `fotografias`, `comentarios`, `comentarios_foto`, `likes_publicaciones`, `likes_fotografias`, `seguidores`, `citaciones`, `transferencias_creditos`, `auditoria`. Constraints requeridas: `UNIQUE(cedula)`, `CHECK(cargo IN ('profesor','investigador'))`, `DEFAULT 0 CHECK >= 0`, `CHECK(fecha_publicacion <= NOW())`.
+- `01_schema.sql` — 10 tablas: `usuarios`, `cuentas`, `publicaciones`, `fotografias`, `comentarios`, `likes_publicaciones`, `seguidores`, `citaciones`, `transferencias_creditos`, `auditoria`. Las fotografías son adjuntos opcionales; comentarios y likes pertenecen a publicaciones.
 - `02_procedures.sql` — 7 funciones PL/pgSQL:
   - `registrar_usuario_y_cuenta(...)` → crea usuario + cuenta en una sola llamada; captura `unique_violation` y `check_violation` con mensaje controlado.
   - `dar_like_publicacion(id_usuario, id_publicacion)` → registra like + transfiere 1 crédito al autor (ACID).
@@ -141,8 +141,7 @@ Proyecto_BD2/
   - `trg_auditoria_registro_fotografia` → registra fotografías nuevas sin duplicar el objeto BYTEA.
   - `trg_antispam_publicaciones` → `BEFORE INSERT`; lanza excepción si el usuario publicó ≥5 veces en el último minuto.
   - `trg_actualizar_seguidores` → `AFTER INSERT/DELETE` en `seguidores`; actualiza `numero_seguidores`.
-  - `trg_actualizar_likes_foto` → `AFTER INSERT/DELETE` en `likes_fotografias`; actualiza `nro_likes`.
-- `04_indexes.sql` — 17 índices B-Tree, parciales y compuestos sobre `publicaciones`, `comentarios`, `fotografias`, `likes_*`, `usuarios` y `transferencias_creditos`.
+- `04_indexes.sql` — 15 índices B-Tree, parciales y compuestos sobre `publicaciones`, `comentarios`, `fotografias`, `likes_publicaciones`, `usuarios` y `transferencias_creditos`.
 - `05_top_fotografos.sql` — completa idempotentemente los comentarios demostrativos y crea `vw_top_fotografos`.
 
 #### Backend (`app/`)
